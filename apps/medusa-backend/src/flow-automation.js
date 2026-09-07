@@ -8,8 +8,12 @@ const { Client } = require('pg')
 const logger = require('./logger')
 const { resolveSmtpSenderIdentity } = require('./smtp-sender-resolve')
 const { resolveOrderPaidTotalCents } = require('./order-money')
-const { resolveFlowMailProvider, sendFlowOutboundEmail } = require('./email-providers')
+const { resolveFlowMailProvider, resolveResendApiKey, sendFlowOutboundEmail } = require('./email-providers')
 const { consumeFlowEmailSlot } = require('./flow-email-rate-limit')
+
+/** Cap retries for a single flow step. Failed abandoned_cart scans used to retry forever
+ *  (every 15 min) and each failure emailed info@ via Resend — burning the daily quota. */
+const MAX_FLOW_SEND_ATTEMPTS = Math.max(1, parseInt(String(process.env.FLOW_SEND_MAX_ATTEMPTS || '3'), 10) || 3)
 const { SUPPORTED_LOCALES: FLOW_EMAIL_LOCALES, resolveLocaleFromCountry: resolveEmailLocaleFromCountry } = require('./locale-from-country')
 const { enrichOrderItemRows } = require('./order-items-seller')
 const {
@@ -56,6 +60,30 @@ function absoluteStorefrontUrl(baseSite, path) {
   if (!b) return ''
   if (!p.startsWith('/')) return `${b}/${p}`
   return `${b}${p}`
+}
+
+/** Resend (and most ESP test modes) reject RFC example domains — never attempt to send. */
+function isNonDeliverableFlowRecipient(email) {
+  const e = String(email || '').trim().toLowerCase()
+  if (!e || !e.includes('@')) return true
+  const domain = e.split('@').pop() || ''
+  if (
+    domain === 'example.com' ||
+    domain === 'example.org' ||
+    domain === 'example.net' ||
+    domain === 'test' ||
+    domain.endsWith('.example') ||
+    domain.endsWith('.invalid') ||
+    domain.endsWith('.localhost') ||
+    domain === 'localhost'
+  ) {
+    return true
+  }
+  // Common E2E / seed placeholders
+  if (/^(claude-e2e-test|e2e-test|test\+|noreply\+test)/i.test(e.split('@')[0] || '')) {
+    if (domain === 'example.com' || domain.endsWith('.test')) return true
+  }
+  return false
 }
 
 /**
@@ -234,29 +262,77 @@ function buildFlowStepIdempotencyKey({ triggerKey, flowId, stepOrder, audience, 
   return crypto.createHash('sha256').update(raw).digest('hex')
 }
 
+/**
+ * Claim a send attempt for this idempotency key.
+ * Returns { skip: true } when already sent/skipped or permanently failed (attempts exhausted).
+ * Does NOT increment attempts for terminal rows (avoids attempt inflation on every 15‑min scan).
+ */
 async function reserveFlowExecutionLog(client, entry) {
-  const r = await client.query(
-    `INSERT INTO store_flow_execution_logs
-      (trigger_key, flow_id, step_order, audience, recipient_email, order_id, customer_id, idempotency_key, status, attempts, metadata, created_at, updated_at)
-     VALUES
-      ($1, $2::uuid, $3, $4, $5, NULLIF($6,'')::uuid, NULLIF($7,'')::uuid, $8, 'pending', 1, $9::jsonb, now(), now())
-     ON CONFLICT (idempotency_key) DO UPDATE
-       SET attempts = store_flow_execution_logs.attempts + 1,
-           updated_at = now()
-     RETURNING id, status, attempts`,
-    [
-      String(entry.triggerKey || '').trim(),
-      String(entry.flowId || '').trim(),
-      Number(entry.stepOrder || 0),
-      String(entry.audience || '').trim(),
-      String(entry.recipientEmail || '').trim().toLowerCase(),
-      String(entry.orderId || '').trim(),
-      String(entry.customerId || '').trim(),
-      String(entry.idempotencyKey || '').trim(),
-      JSON.stringify(entry.metadata || {}),
-    ],
+  const idempotencyKey = String(entry.idempotencyKey || '').trim()
+  const existing = await client.query(
+    `SELECT id, status, attempts, metadata FROM store_flow_execution_logs WHERE idempotency_key = $1 LIMIT 1`,
+    [idempotencyKey],
   )
-  return r.rows[0] || null
+  if (existing.rows[0]) {
+    const row = existing.rows[0]
+    const status = String(row.status || '')
+    const attempts = Number(row.attempts || 0)
+    if (status === 'sent' || status === 'skipped') {
+      return { id: row.id, status, attempts, skip: true, metadata: row.metadata }
+    }
+    if (status === 'failed' && attempts >= MAX_FLOW_SEND_ATTEMPTS) {
+      return { id: row.id, status, attempts, skip: true, metadata: row.metadata }
+    }
+    // Atomic claim — concurrent scanners (multi-instance) lose the race cleanly.
+    const upd = await client.query(
+      `UPDATE store_flow_execution_logs
+       SET attempts = attempts + 1,
+           status = 'pending',
+           error_message = NULL,
+           updated_at = now()
+       WHERE idempotency_key = $1
+         AND status IN ('pending', 'failed')
+         AND attempts < $2
+       RETURNING id, status, attempts, metadata`,
+      [idempotencyKey, MAX_FLOW_SEND_ATTEMPTS],
+    )
+    if (!upd.rows[0]) {
+      const again = await client.query(
+        `SELECT id, status, attempts, metadata FROM store_flow_execution_logs WHERE idempotency_key = $1 LIMIT 1`,
+        [idempotencyKey],
+      )
+      const r2 = again.rows[0] || row
+      return { id: r2.id, status: r2.status, attempts: r2.attempts, skip: true, metadata: r2.metadata }
+    }
+    return { ...upd.rows[0], skip: false }
+  }
+  try {
+    const r = await client.query(
+      `INSERT INTO store_flow_execution_logs
+        (trigger_key, flow_id, step_order, audience, recipient_email, order_id, customer_id, idempotency_key, status, attempts, metadata, created_at, updated_at)
+       VALUES
+        ($1, $2::uuid, $3, $4, $5, NULLIF($6,'')::uuid, NULLIF($7,'')::uuid, $8, 'pending', 1, $9::jsonb, now(), now())
+       RETURNING id, status, attempts, metadata`,
+      [
+        String(entry.triggerKey || '').trim(),
+        String(entry.flowId || '').trim(),
+        Number(entry.stepOrder || 0),
+        String(entry.audience || '').trim(),
+        String(entry.recipientEmail || '').trim().toLowerCase(),
+        String(entry.orderId || '').trim(),
+        String(entry.customerId || '').trim(),
+        idempotencyKey,
+        JSON.stringify(entry.metadata || {}),
+      ],
+    )
+    return r.rows[0] ? { ...r.rows[0], skip: false } : null
+  } catch (e) {
+    // Unique violation — another instance inserted first; re-enter via SELECT path.
+    if (e && (e.code === '23505' || /duplicate/i.test(String(e.message || '')))) {
+      return reserveFlowExecutionLog(client, entry)
+    }
+    throw e
+  }
 }
 
 async function finalizeFlowExecutionLog(client, idempotencyKey, patch) {
@@ -750,12 +826,31 @@ async function buildFlowEmailPlaceholderVarsForCustomer(client, customerId) {
 /**
  * A flow email actually failed to send (SMTP/Resend error) — surfaces this two ways so it isn't
  * only visible by digging through Content → Flows → Activity: (1) a superuser-panel notification
- * (admin_hub_notifications, type 'flow_send_failed' — see routes/notifications.js), and (2) a
- * direct heads-up email, since the superuser may not be watching the panel in real time.
+ * (admin_hub_notifications, type 'flow_send_failed' — see routes/notifications.js), and (2) at most
+ * one ops email per failure incident. Ops alerts never go through Resend (would burn customer-mail
+ * daily quota and show as "delivered" in Resend while the real flow mail failed).
  */
-async function notifySuperuserFlowFailure(client, { triggerKey, flowId, stepOrder, recipientEmail, errorMessage, fromEmail, fromName, transport }) {
+async function notifySuperuserFlowFailure(client, {
+  triggerKey,
+  flowId,
+  stepOrder,
+  recipientEmail,
+  errorMessage,
+  fromEmail,
+  fromName,
+  transport,
+  idempotencyKey,
+  attempt,
+}) {
   const title = `Flow-Mail fehlgeschlagen: ${triggerKey || 'unbekannt'}`
   const bodyText = `Flow ${flowId}, Schritt ${stepOrder}, Empfänger ${recipientEmail || '—'}: ${String(errorMessage || '').slice(0, 400)}`
+
+  // Retries must not spam the panel or burn any mail quota.
+  if (Number(attempt || 1) > 1) {
+    logger.warn(`[flow-automation] ${title} (retry attempt=${attempt}, no re-alert) — ${bodyText}`)
+    return
+  }
+
   try {
     await client.query(
       `INSERT INTO admin_hub_notifications (type, title, body, reference_id) VALUES ('flow_send_failed', $1, $2, $3)`,
@@ -764,10 +859,44 @@ async function notifySuperuserFlowFailure(client, { triggerKey, flowId, stepOrde
   } catch (e) {
     logger.warn('[flow-automation] failed to insert flow_send_failed notification', e?.message || e)
   }
-  const alertTo = String(process.env.FLOW_FAILURE_ALERT_EMAIL || 'info@andertal.com').trim()
-  if (!alertTo) return
+
+  if (idempotencyKey) {
+    try {
+      const prev = await client.query(
+        `SELECT metadata->>'failure_alert_sent' AS sent FROM store_flow_execution_logs WHERE idempotency_key = $1 LIMIT 1`,
+        [String(idempotencyKey)],
+      )
+      if (String(prev.rows[0]?.sent || '') === '1') return
+      await client.query(
+        `UPDATE store_flow_execution_logs
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"failure_alert_sent":"1"}'::jsonb, updated_at = now()
+         WHERE idempotency_key = $1`,
+        [String(idempotencyKey)],
+      )
+    } catch (_) {}
+  }
+
+  // Explicit empty disables email; default still info@ but only via SMTP (never Resend).
+  const alertToRaw = process.env.FLOW_FAILURE_ALERT_EMAIL
+  const alertTo =
+    alertToRaw === undefined || alertToRaw === null
+      ? 'info@andertal.com'
+      : String(alertToRaw).trim()
+  if (!alertTo || alertTo === '0' || alertTo.toLowerCase() === 'off') return
+
   try {
+    const provider = await resolveFlowMailProvider(client)
+    if (provider === 'resend') {
+      // Panel notification above is enough — do not burn Resend quota on ops alerts.
+      logger.warn(`[flow-automation] ${title} — ${bodyText}`)
+      return
+    }
+    if (!transport) {
+      logger.warn(`[flow-automation] ${title} (no SMTP for ops alert) — ${bodyText}`)
+      return
+    }
     await sendFlowOutboundEmail({
+      client,
       transport,
       from: `"${String(fromName || 'Andertal').replace(/"/g, '')}" <${fromEmail || alertTo}>`,
       to: alertTo,
@@ -847,9 +976,9 @@ async function sendImmediateStepsForFlow({
       idempotencyKey,
       metadata: { templateLocale, step_type: s.step_type, channel: 'email', dedupe_key: dedupeKey || undefined },
     })
-    if (reserved && reserved.attempts > 1 && reserved.status === 'sent') {
+    if (reserved?.skip) {
       logger.info(
-        `[flow-automation] idempotent-skip trigger=${triggerKey} flow=${flowId} step=${stepOrder} recipient=${String(toEmail || '').toLowerCase()}`,
+        `[flow-automation] idempotent-skip trigger=${triggerKey} flow=${flowId} step=${stepOrder} status=${reserved.status} attempts=${reserved.attempts} recipient=${String(toEmail || '').toLowerCase()}`,
       )
       idx += 1
       continue
@@ -871,6 +1000,17 @@ async function sendImmediateStepsForFlow({
         status: 'skipped',
         errorMessage: 'recipient_missing',
       })
+      idx += 1
+      continue
+    }
+    if (isNonDeliverableFlowRecipient(toEmail)) {
+      await finalizeFlowExecutionLog(client, idempotencyKey, {
+        status: 'skipped',
+        errorMessage: 'recipient_non_deliverable_test_domain',
+      })
+      logger.warn(
+        `[flow-automation] skip non-deliverable recipient trigger=${triggerKey} flow=${flowId} to=${String(toEmail).toLowerCase()}`,
+      )
       idx += 1
       continue
     }
@@ -907,11 +1047,25 @@ async function sendImmediateStepsForFlow({
       try {
         consumeFlowEmailSlot(rateScopeKey || 'default')
       } catch (rlErr) {
-        await finalizeFlowExecutionLog(client, idempotencyKey, {
-          status: 'failed',
-          errorMessage: rlErr?.message || 'rate_limited',
-          metadata: { channel: 'email', ab_variant: abVariant, rate_limited: true },
-        })
+        // Leave pending so the next scan can retry without burning the permanent-failure budget.
+        const attempts = Number(reserved?.attempts || 1)
+        await client.query(
+          `UPDATE store_flow_execution_logs
+           SET attempts = GREATEST(attempts - 1, 0),
+               status = 'pending',
+               error_message = $2,
+               metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
+               updated_at = now()
+           WHERE idempotency_key = $1`,
+          [
+            idempotencyKey,
+            rlErr?.message || 'rate_limited',
+            JSON.stringify({ channel: 'email', ab_variant: abVariant, rate_limited: true }),
+          ],
+        )
+        logger.warn(
+          `[flow-automation] rate-limited trigger=${triggerKey} flow=${flowId} step=${stepOrder} attempt=${attempts}`,
+        )
         idx += 1
         continue
       }
@@ -935,24 +1089,44 @@ async function sendImmediateStepsForFlow({
         },
       })
     } catch (sendErr) {
+      const errMsg = sendErr?.message || String(sendErr || 'send_failed')
+      const attempts = Number(reserved?.attempts || 1)
+      // Quota / hard provider errors: do not keep retrying every 15 minutes.
+      const permanent =
+        attempts >= MAX_FLOW_SEND_ATTEMPTS ||
+        /daily|quota|rate.?limit|too many|429|402|forbidden|invalid.*to|invalid.*from/i.test(errMsg)
       await finalizeFlowExecutionLog(client, idempotencyKey, {
         status: 'failed',
-        errorMessage: sendErr?.message || String(sendErr || 'send_failed'),
-        metadata: { channel: 'email', ab_variant: abVariant },
+        errorMessage: errMsg,
+        metadata: {
+          channel: 'email',
+          ab_variant: abVariant,
+          attempts,
+          permanent: permanent || undefined,
+        },
       })
+      if (permanent && attempts < MAX_FLOW_SEND_ATTEMPTS) {
+        // Force exhaustion so subsequent scans skip immediately.
+        await client.query(
+          `UPDATE store_flow_execution_logs SET attempts = $2, updated_at = now() WHERE idempotency_key = $1`,
+          [idempotencyKey, MAX_FLOW_SEND_ATTEMPTS],
+        )
+      }
       logger.error(
-        `[flow-automation] send failed trigger=${triggerKey} flow=${flowId} step=${stepOrder}:`,
-        sendErr?.message || sendErr,
+        `[flow-automation] send failed trigger=${triggerKey} flow=${flowId} step=${stepOrder} attempt=${attempts}:`,
+        errMsg,
       )
       await notifySuperuserFlowFailure(client, {
         triggerKey,
         flowId,
         stepOrder,
         recipientEmail: toEmail,
-        errorMessage: sendErr?.message || String(sendErr || 'send_failed'),
+        errorMessage: errMsg,
         fromEmail,
         fromName,
         transport,
+        idempotencyKey,
+        attempt: attempts,
       }).catch(() => {})
       idx += 1
       continue
@@ -1027,9 +1201,9 @@ async function runAutomationFlowsForOrder(opts) {
         return
       }
     } else {
-      const key = String(process.env.RESEND_API_KEY || '').trim()
+      const key = await resolveResendApiKey(client)
       if (!key) {
-        logger.warn('[flow-automation] skip: FLOW_MAIL_PROVIDER=resend but RESEND_API_KEY missing')
+        logger.warn('[flow-automation] skip: Resend selected but API key missing (store_integrations or RESEND_API_KEY)')
         return
       }
     }
@@ -1219,8 +1393,8 @@ async function runAutomationFlowsForSellerEvent(opts) {
         logger.warn('[flow-automation] skip seller event: SMTP not configured')
         return
       }
-    } else if (!String(process.env.RESEND_API_KEY || '').trim()) {
-      logger.warn('[flow-automation] skip seller event: RESEND_API_KEY missing')
+    } else if (!(await resolveResendApiKey(client))) {
+      logger.warn('[flow-automation] skip seller event: Resend API key missing')
       return
     }
 
@@ -1356,8 +1530,8 @@ async function runAutomationFlowsForCustomerEvent(opts) {
         logger.warn('[flow-automation] skip customer event: SMTP not configured')
         return
       }
-    } else if (!String(process.env.RESEND_API_KEY || '').trim()) {
-      logger.warn('[flow-automation] skip customer event: RESEND_API_KEY missing')
+    } else if (!(await resolveResendApiKey(client))) {
+      logger.warn('[flow-automation] skip customer event: Resend API key missing')
       return
     }
 
@@ -1528,8 +1702,8 @@ async function runAutomationFlowsForMessageEvent(opts) {
         logger.warn('[flow-automation] skip message event: SMTP not configured')
         return 0
       }
-    } else if (!String(process.env.RESEND_API_KEY || '').trim()) {
-      logger.warn('[flow-automation] skip message event: RESEND_API_KEY missing')
+    } else if (!(await resolveResendApiKey(client))) {
+      logger.warn('[flow-automation] skip message event: Resend API key missing')
       return 0
     }
 
@@ -1714,6 +1888,9 @@ async function runAbandonedCartScan() {
        JOIN store_cart_items ci ON ci.cart_id = c.id
        LEFT JOIN store_orders o ON o.cart_id = c.id
        WHERE o.id IS NULL AND c.email IS NOT NULL AND c.email != ''
+         AND c.email NOT ILIKE '%@example.com'
+         AND c.email NOT ILIKE '%@example.org'
+         AND c.email NOT ILIKE '%@example.net'
          AND c.updated_at <= now() - ($1::numeric * interval '1 hour')
        GROUP BY c.id, c.email, c.updated_at
        HAVING COUNT(ci.id) FILTER (WHERE ci.removed_at IS NULL) > 0
@@ -1723,6 +1900,7 @@ async function runAbandonedCartScan() {
     await client.end()
 
     for (const row of r.rows || []) {
+      if (isNonDeliverableFlowRecipient(row.email)) continue
       const elapsedHours = row.updated_at ? (Date.now() - new Date(row.updated_at).getTime()) / (1000 * 60 * 60) : null
       await runAutomationFlowsForCustomerEvent({
         triggerKey: 'abandoned_cart',
