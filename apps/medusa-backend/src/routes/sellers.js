@@ -274,6 +274,31 @@ module.exports = function createSellersRouter({ getSellerDbClient, signSellerTok
             console.warn('Could not auto-publish products for seller:', e2?.message)
           }
         }
+        // docs/affiliate.md PR 6 — Model 1: create the commission-generating seller_referrals row
+        // at APPROVAL time (not at signup). shouldCreateSellerReferral encodes the "first
+        // attribute wins, never reassigned" lock-in rule (attribution-engine.js) — the actual
+        // enforcement is seller_referrals.seller_id being UNIQUE, this is just the pure-logic
+        // mirror of that constraint so the check reads the same everywhere it's used.
+        if (status === 'approved' && seller.seller_id) {
+          try {
+            const { ensureAffiliateTables } = require('../modules/affiliate-platform/schema')
+            const { shouldCreateSellerReferral } = require('../modules/affiliate-platform/attribution-engine')
+            await ensureAffiliateTables(client)
+            const suRow = await client.query('SELECT referred_by_affiliate_id FROM seller_users WHERE id = $1', [id])
+            const referredByAffiliateId = suRow.rows[0]?.referred_by_affiliate_id
+            if (referredByAffiliateId) {
+              const existing = await client.query('SELECT id FROM seller_referrals WHERE seller_id = $1', [seller.seller_id])
+              if (shouldCreateSellerReferral(existing.rows[0] || null)) {
+                await client.query(
+                  `INSERT INTO seller_referrals (affiliate_id, seller_id) VALUES ($1, $2)`,
+                  [referredByAffiliateId, seller.seller_id],
+                )
+              }
+            }
+          } catch (e3) {
+            console.warn('Could not create seller_referrals row on approval:', e3?.message)
+          }
+        }
         // If rejected/suspended: unpublish their products
         if ((status === 'rejected' || status === 'suspended') && seller.seller_id) {
           try {

@@ -114,7 +114,11 @@
     "issueLog": "Sorun günlüğü",
     "transactions": "İşlemler",
     "appStore": "Uygulama Mağazası",
-    "installed": "Yüklenenler"
+    "installed": "Yüklenenler",
+    "complianceReview": "Uyumluluk incelemesi",
+    "complianceProfiles": "Uyumluluk profilleri",
+    "affiliateMarketing": "Affiliate",
+    "affiliateAdmin": "Affiliate yönetimi"
   },
   "rankingPage": {
     "title": "Mağazada ürün sıralaması",

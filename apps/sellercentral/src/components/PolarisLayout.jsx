@@ -174,6 +174,7 @@ const SUPERUSER_NAV_HREF_FRAGMENTS = [
   "/content/compliance-review",
   "/content/compliance-profiles",
   "/content/payout-risk",
+  "/affiliate-admin",
   "/analytics/live-view",
 ];
 
@@ -310,6 +311,8 @@ function getMenuItemsMain(t, isSuperuser = false) {
       subNavigationItems: [
         { url: "/marketing/campaigns", label: tx("campaigns", "Campaigns") },
         { url: "/marketing/attribution", label: tx("attribution", "Attribution") },
+        { url: "/marketing/affiliate", label: tx("affiliateMarketing", "Affiliate") },
+        { url: "/affiliate-admin", label: tx("affiliateAdmin", "Affiliate admin"), superuserOnly: true },
         { url: "/marketing/seo", label: tx("seo", "SEO"), superuserOnly: true },
         { url: "/marketing/automations", label: tx("automations", "Automations"), superuserOnly: true },
       ],
@@ -706,6 +709,7 @@ export default function PolarisLayout({ children }) {
     "/content/compliance-review",
     "/content/compliance-profiles",
     "/content/payout-risk",
+    "/affiliate-admin",
     "/analytics/live-view",
     "/orders/abandoned-checkouts",
     "/customers-menu",
@@ -1246,6 +1250,7 @@ export default function PolarisLayout({ children }) {
     "/content/compliance-review",
     "/content/compliance-profiles",
     "/content/payout-risk",
+    "/affiliate-admin",
     "/analytics/live-view",
     "/orders/abandoned-checkouts",
     "/customers-menu",

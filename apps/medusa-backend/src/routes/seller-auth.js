@@ -279,6 +279,33 @@ const SellerRegisterSchema = z.object({
   agreement_accepted: z.boolean().optional(),
   agreement_version:  z.string().optional(),
 })
+// docs/affiliate.md PR 6 — sellercentral's middleware.js (PR 2) drops a short-lived
+// `andertal_referred_by` cookie when ?ref= is present on /register. cookie-parser isn't mounted
+// until later in server.js (after this router), so this route can't rely on req.cookies — read
+// the raw Cookie header directly instead of moving global middleware order.
+function readCookieValue(req, name) {
+  const header = req.headers?.cookie
+  if (!header) return null
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq === -1) continue
+    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim())
+  }
+  return null
+}
+
+/** Format-checks + looks up the referring affiliate by code — never blocks registration if absent/invalid. */
+async function resolveReferringAffiliateId(req, client) {
+  const code = readCookieValue(req, 'andertal_referred_by')
+  if (!code || !/^AFF_[0-9A-Z]{8}$/.test(code)) return null
+  try {
+    const r = await client.query(`SELECT id FROM affiliates WHERE code = $1 AND status = 'active'`, [code])
+    return r.rows[0]?.id || null
+  } catch {
+    return null
+  }
+}
+
 const sellerAuthRegisterPOST = async (req, res) => {
   const parsed = validate(SellerRegisterSchema, req.body || {}, res)
   if (!parsed) return
@@ -337,11 +364,15 @@ const sellerAuthRegisterPOST = async (req, res) => {
     const agreement_accepted_at = agreement_accepted ? new Date().toISOString() : null
     const agreement_version = body.agreement_version || '1.0'
     const agreement_ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || null
+    // docs/affiliate.md PR 6 — Model 1. Only stamps WHO referred this account; the actual
+    // commission-generating seller_referrals row (with its UNIQUE seller_id lock-in) is created
+    // separately at superuser approval time, not here — see the seller approval handler below.
+    const referred_by_affiliate_id = await resolveReferringAffiliateId(req, client)
     const r = await client.query(
-      `INSERT INTO seller_users (email, password_hash, store_name, seller_id, is_superuser, sub_of_seller_id, permissions, first_name, last_name, agreement_accepted, agreement_accepted_at, agreement_version, agreement_ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO seller_users (email, password_hash, store_name, seller_id, is_superuser, sub_of_seller_id, permissions, first_name, last_name, agreement_accepted, agreement_accepted_at, agreement_version, agreement_ip, referred_by_affiliate_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id, email, store_name, seller_id, is_superuser, sub_of_seller_id, permissions, first_name, last_name, created_at`,
-      [email, password_hash, effective_store_name, own_seller_id, is_superuser, sub_of_seller_id, effective_permissions ? JSON.stringify(effective_permissions) : null, display_first, display_last, agreement_accepted, agreement_accepted_at, agreement_version, agreement_ip]
+      [email, password_hash, effective_store_name, own_seller_id, is_superuser, sub_of_seller_id, effective_permissions ? JSON.stringify(effective_permissions) : null, display_first, display_last, agreement_accepted, agreement_accepted_at, agreement_version, agreement_ip, referred_by_affiliate_id]
     )
     if (effective_store_name && !sub_of_seller_id) {
       await client.query(

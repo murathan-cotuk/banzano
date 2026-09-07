@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "dashboard": "Panel",
+    "links": "Enlaces",
+    "reports": "Informes",
+    "resources": "Recursos",
+    "terms": "Términos",
+    "logout": "Cerrar sesión"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "loginSubtitle": "Bienvenido de nuevo al portal de afiliados",
+    "signup": "Crear cuenta",
+    "signupSubtitle": "Únete al programa de afiliados de Andertal",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "passwordHint": "Mín. 8 caracteres, al menos una letra y un número",
+    "fullName": "Nombre completo",
+    "companyName": "Nombre de la empresa (opcional)",
+    "country": "País",
+    "countryHint": "Código de 2 letras (p. ej. DE). Registro abierto solo en la UE, Reino Unido y Suiza.",
+    "vatNumber": "NIF/IVA (opcional)",
+    "agreeTerms": "Acepto los Términos de afiliación y la Política de privacidad",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta?",
+    "noAccount": "¿No tienes una cuenta?",
+    "loginError": "Correo o contraseña no válidos.",
+    "signupError": "No se pudo crear la cuenta. Inténtalo de nuevo.",
+    "signupSuccess": "¡Cuenta creada! Redirigiendo…",
+    "loading": "Cargando…",
+    "requiredFields": "El nombre, el correo y la contraseña son obligatorios.",
+    "requiredCountry": "El país es obligatorio.",
+    "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
+    "mustAgree": "Debes aceptar los términos para registrarte."
+  },
+  "dashboard": {
+    "title": "Sigue tus enlaces, clics y comisiones",
+    "welcome": "Bienvenido de nuevo",
+    "pendingApproval": "Tu cuenta está pendiente de aprobación. Ya puedes crear enlaces, pero los clics no generarán comisión hasta que un superusuario apruebe tu cuenta.",
+    "suspended": "Tu cuenta está actualmente suspendida. Contacta con soporte para más detalles.",
+    "activeLinks": "Enlaces activos",
+    "totalClicks": "Clics totales",
+    "referredSellers": "Vendedores referidos",
+    "pendingCommission": "Comisión pendiente",
+    "confirmedCommission": "Comisión confirmada",
+    "quickActions": "Acciones rápidas",
+    "createLink": "Crear enlace",
+    "viewLinks": "Ver todos los enlaces"
+  },
+  "links": {
+    "title": "Mis enlaces",
+    "newLink": "Nuevo enlace",
+    "newSubtitle": "Genera un enlace rastreable — para cualquier producto del catálogo, una categoría, la tienda o el registro de vendedor.",
+    "type": {
+      "storefront": "Tienda",
+      "product": "Producto",
+      "category": "Categoría",
+      "seller_signup": "Registro de vendedor"
+    },
+    "typeDesc": {
+      "storefront": "Enlaza con la página principal de la tienda",
+      "product": "Enlaza con un producto concreto — cualquier producto del catálogo, sin necesidad de aprobación del vendedor",
+      "category": "Enlaza con una página de categoría o colección",
+      "seller_signup": "Enlaza con la página de registro de vendedor (5% de la comisión de plataforma del vendedor referido, de forma continua)"
+    },
+    "label": "Etiqueta",
+    "shortUrl": "URL corta",
+    "created": "Creado",
+    "loading": "Cargando…",
+    "noLinks": "Aún no hay enlaces. Crea tu primer enlace.",
+    "copy": "Copiar",
+    "copied": "¡Copiado!",
+    "categoryPath": "Ruta de categoría",
+    "productSearch": "Buscar producto",
+    "productSearchPlaceholder": "Nombre del producto…",
+    "searching": "Buscando…",
+    "selectedProduct": "Seleccionado",
+    "labelOptional": "Etiqueta (opcional)",
+    "labelPlaceholder": "p. ej. enlace de bio de Instagram",
+    "creating": "Creando…",
+    "newError": "No se pudo crear el enlace. Inténtalo de nuevo.",
+    "newErrorTarget": "Completa los detalles del enlace arriba."
+  }
+}

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Page, Card, BlockStack, InlineStack, Text, Badge, Banner, Select, Button, Box, Spinner } from "@shopify/polaris";
+import { Page, Card, BlockStack, InlineStack, Text, Badge, Banner, Select, Button, Box, Spinner, TextField } from "@shopify/polaris";
 import CategoryDrilldownSelect from "@/components/inputs/CategoryDrilldownSelect";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 
@@ -30,6 +30,17 @@ const copy = (locale) => {
       "Her kategoriye otomatik olarak bir uyumluluk profili atandı. Bu atama her zaman doğru değildir — bu sayfayı belirli bir kategoriyi, kardeşlerini etkilemeden düzeltmek için kullanın.",
       "Jeder Kategorie wurde automatisch ein Compliance-Profil zugewiesen. Diese Zuordnung ist nicht immer korrekt — nutzen Sie diese Seite, um eine bestimmte Kategorie zu korrigieren, ohne die Geschwisterkategorien zu beeinflussen.",
     ),
+    overviewTitle: t("All categories", "Tüm kategoriler", "Alle Kategorien"),
+    searchPlaceholder: t("Search category…", "Kategori ara…", "Kategorie suchen…"),
+    filterAll: t("All", "Tümü", "Alle"),
+    filterOwn: t("Own override", "Kendi ayarı", "Eigene Einstellung"),
+    filterInherited: t("Inherited", "Miras alınan", "Geerbt"),
+    filterDefault: t("No coverage (default)", "Kapsam yok (varsayılan)", "Keine Zuweisung (Standard)"),
+    colCategory: t("Category", "Kategori", "Kategorie"),
+    colProfile: t("Effective profile", "Geçerli profil", "Wirksames Profil"),
+    colStatus: t("Status", "Durum", "Status"),
+    resultCount: (n, total) => t(`${n} of ${total}`, `${total} kategoriden ${n}`, `${n} von ${total}`),
+    overviewLoadError: t("Could not load the category overview.", "Kategori genel görünümü yüklenemedi.", "Kategorieübersicht konnte nicht geladen werden."),
     pickCategory: t("Category", "Kategori", "Kategorie"),
     pickPlaceholder: t("Search or browse a category…", "Bir kategori arayın veya gezinin…", "Kategorie suchen oder durchsuchen…"),
     currentProfile: t("Effective profile", "Geçerli profil", "Wirksames Profil"),
@@ -37,6 +48,7 @@ const copy = (locale) => {
     inheritOption: t("— Inherit from parent category —", "— Üst kategoriden miras al —", "— Von übergeordneter Kategorie erben —"),
     inheritedBadge: t("Inherited", "Miras alınıyor", "Geerbt"),
     ownBadge: t("Own setting", "Kendi ayarı", "Eigene Einstellung"),
+    defaultBadge: t("No coverage (default profile)", "Kapsam yok (varsayılan profil)", "Keine Zuweisung (Standardprofil)"),
     requiredFields: t("Required fields for this category right now", "Bu kategori için şu an zorunlu alanlar", "Aktuell für diese Kategorie erforderliche Felder"),
     save: t("Save", "Kaydet", "Speichern"),
     saved: t("Saved.", "Kaydedildi.", "Gespeichert."),
@@ -45,6 +57,33 @@ const copy = (locale) => {
     selectFirst: t("Select a category above to see and change its compliance profile.", "Uyumluluk profilini görmek ve değiştirmek için yukarıdan bir kategori seçin.", "Wählen Sie oben eine Kategorie, um deren Compliance-Profil zu sehen und zu ändern."),
   };
 };
+
+const STATUS_TONE = { own: "success", inherited: "info", default: "attention" };
+
+function SortableHeader({ label, field, sort, onSort }) {
+  const active = sort.field === field;
+  return (
+    <th
+      role="button"
+      tabIndex={0}
+      onClick={() => onSort(field)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSort(field); } }}
+      style={{
+        padding: "10px 16px",
+        fontSize: 11,
+        fontWeight: 700,
+        color: active ? "#111827" : "#6d7175",
+        textTransform: "uppercase",
+        borderBottom: "1px solid #e1e3e5",
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label} {active ? (sort.dir === "asc" ? "▲" : "▼") : ""}
+    </th>
+  );
+}
 
 export default function ComplianceProfilesPage() {
   const locale = useLocale();
@@ -61,6 +100,21 @@ export default function ComplianceProfilesPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
+  // Overview table (all categories at once) — separate from the single-category editor below.
+  const [overview, setOverview] = useState(null); // null = loading
+  const [overviewError, setOverviewError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState({ field: "category", dir: "asc" });
+
+  const loadOverview = () => {
+    setOverview(null);
+    setOverviewError("");
+    getMedusaAdminClient().getComplianceOverview()
+      .then((d) => setOverview(d.categories || []))
+      .catch(() => { setOverview([]); setOverviewError(c.overviewLoadError); });
+  };
+
   useEffect(() => {
     const su = typeof window !== "undefined" && localStorage.getItem("sellerIsSuperuser") === "true";
     setIsSuperuser(su);
@@ -72,6 +126,7 @@ export default function ComplianceProfilesPage() {
         setProfiles(profRes.profiles || []);
       })
       .catch(() => setLoadError(c.loadError));
+    loadOverview();
   }, []);
 
   useEffect(() => {
@@ -109,10 +164,55 @@ export default function ComplianceProfilesPage() {
       const fresh = await getMedusaAdminClient().getCategoryComplianceSchema(categoryId);
       setSchema(fresh);
       setMessage({ type: "success", text: c.saved });
+      loadOverview(); // this category's row (and any children inheriting from it) may have changed
     } catch (e) {
       setMessage({ type: "error", text: e?.message || c.saveError });
     }
     setSaving(false);
+  };
+
+  const statusFilterOptions = [
+    { label: c.filterAll, value: "" },
+    { label: c.filterOwn, value: "own" },
+    { label: c.filterInherited, value: "inherited" },
+    { label: c.filterDefault, value: "default" },
+  ];
+
+  const handleSort = (field) => {
+    setSort((prev) => (prev.field === field ? { field, dir: prev.dir === "asc" ? "desc" : "asc" } : { field, dir: "asc" }));
+  };
+
+  const visibleOverview = useMemo(() => {
+    if (!Array.isArray(overview)) return [];
+    const q = search.trim().toLowerCase();
+    let list = overview.filter((row) => {
+      if (statusFilter && row.resolved_from !== statusFilter) return false;
+      if (q && !(row.name || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      let va;
+      let vb;
+      if (sort.field === "profile") {
+        va = localizedLabel(a.effective_profile_label_i18n, locale, a.effective_profile_id || "").toLowerCase();
+        vb = localizedLabel(b.effective_profile_label_i18n, locale, b.effective_profile_id || "").toLowerCase();
+      } else if (sort.field === "status") {
+        va = a.resolved_from || "";
+        vb = b.resolved_from || "";
+      } else {
+        va = (a.name || "").toLowerCase();
+        vb = (b.name || "").toLowerCase();
+      }
+      if (va < vb) return sort.dir === "asc" ? -1 : 1;
+      if (va > vb) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [overview, search, statusFilter, sort, locale]);
+
+  const statusBadge = (row) => {
+    const label = row.resolved_from === "own" ? c.ownBadge : row.resolved_from === "inherited" ? c.inheritedBadge : c.defaultBadge;
+    return <Badge tone={STATUS_TONE[row.resolved_from] || "info"}>{label}</Badge>;
   };
 
   if (!isSuperuser) return null;
@@ -122,6 +222,80 @@ export default function ComplianceProfilesPage() {
       <BlockStack gap="400">
         <Text as="p" tone="subdued">{c.subtitle}</Text>
         {loadError && <Banner tone="critical">{loadError}</Banner>}
+
+        {/* ── Overview: every category at a glance, sortable/filterable ── */}
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h3" variant="headingSm">{c.overviewTitle}</Text>
+            <InlineStack gap="300" wrap>
+              <div style={{ minWidth: 220 }}>
+                <TextField
+                  label={c.searchPlaceholder}
+                  labelHidden
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={c.searchPlaceholder}
+                  autoComplete="off"
+                  clearButton
+                  onClearButtonClick={() => setSearch("")}
+                />
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <Select
+                  label={c.filterAll}
+                  labelHidden
+                  options={statusFilterOptions}
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                />
+              </div>
+              {Array.isArray(overview) && (
+                <Text as="span" tone="subdued" variant="bodySm">
+                  {c.resultCount(visibleOverview.length, overview.length)}
+                </Text>
+              )}
+            </InlineStack>
+          </BlockStack>
+          {overviewError && <Box paddingBlockStart="300"><Banner tone="critical">{overviewError}</Banner></Box>}
+          <Box paddingBlockStart="300">
+            {overview === null ? (
+              <Box padding="600"><InlineStack align="center"><Spinner size="small" /></InlineStack></Box>
+            ) : visibleOverview.length === 0 ? (
+              <Box padding="400"><Text as="p" tone="subdued" alignment="center">—</Text></Box>
+            ) : (
+              <div style={{ maxHeight: 420, overflowY: "auto", border: "1px solid #e1e3e5", borderRadius: 8 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#f6f6f7", textAlign: "left", position: "sticky", top: 0 }}>
+                      <SortableHeader label={c.colCategory} field="category" sort={sort} onSort={handleSort} />
+                      <SortableHeader label={c.colProfile} field="profile" sort={sort} onSort={handleSort} />
+                      <SortableHeader label={c.colStatus} field="status" sort={sort} onSort={handleSort} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleOverview.map((row) => (
+                      <tr
+                        key={row.id}
+                        onClick={() => setCategoryId(row.id)}
+                        style={{
+                          borderTop: "1px solid #f1f1f1",
+                          cursor: "pointer",
+                          background: row.id === categoryId ? "#eff6ff" : undefined,
+                        }}
+                      >
+                        <td style={{ padding: "10px 16px", fontWeight: 600, color: "#111827" }}>{row.name || "—"}</td>
+                        <td style={{ padding: "10px 16px" }}>{localizedLabel(row.effective_profile_label_i18n, locale, row.effective_profile_id)}</td>
+                        <td style={{ padding: "10px 16px" }}>{statusBadge(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Box>
+        </Card>
+
+        {/* ── Editor: pick (or click a row above) to override a single category ── */}
         <Card>
           <BlockStack gap="300">
             <CategoryDrilldownSelect

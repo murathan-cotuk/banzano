@@ -259,7 +259,15 @@
       "Bash(cp -r public .next/standalone/apps/shop/public)",
       "Bash(lsof -ti:3000 -sTCP:LISTEN)",
       "Bash(echo \"BUILD EXIT:$?\")",
-      "Bash(PORT=3000 NODE_ENV=production NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.andertal.com node server.js)"
+      "Bash(PORT=3000 NODE_ENV=production NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.andertal.com node server.js)",
+      "Bash(node _verify_affiliate_api_tmp.js)",
+      "Bash(rm -f _verify_affiliate_api_tmp.js)",
+      "Bash(node _verify_product_search_tmp.js)",
+      "Bash(rm -f _verify_product_search_tmp.js)",
+      "Bash(node _verify_seller_marketing_tmp.js)",
+      "Bash(rm -f _verify_seller_marketing_tmp.js)",
+      "Bash(node scripts/_tmp-verify-pr9-brandbid.js)",
+      "Bash(rm scripts/_tmp-verify-pr9-brandbid.js)"
     ]
   }
 }

@@ -114,7 +114,11 @@
     "issueLog": "Issue-Log",
     "transactions": "Transaktionen",
     "appStore": "App Store",
-    "installed": "Installiert"
+    "installed": "Installiert",
+    "complianceReview": "Compliance-Prüfung",
+    "complianceProfiles": "Compliance-Profile",
+    "affiliateMarketing": "Affiliate",
+    "affiliateAdmin": "Affiliate-Verwaltung"
   },
   "rankingPage": {
     "title": "Produkt-Sortierung im Shop",

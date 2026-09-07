@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "dashboard": "Panel",
+    "links": "Linkler",
+    "reports": "Raporlar",
+    "resources": "Kaynaklar",
+    "terms": "Şartlar",
+    "logout": "Çıkış yap"
+  },
+  "auth": {
+    "login": "Giriş yap",
+    "loginSubtitle": "Affiliate portalına tekrar hoş geldiniz",
+    "signup": "Hesap oluştur",
+    "signupSubtitle": "Andertal affiliate programına katıl",
+    "email": "E-posta",
+    "password": "Şifre",
+    "passwordHint": "En az 8 karakter, en az bir harf ve bir rakam",
+    "fullName": "Ad soyad",
+    "companyName": "Şirket adı (opsiyonel)",
+    "country": "Ülke",
+    "countryHint": "2 harfli kod (ör. DE). Kayıt sadece AB, İngiltere ve İsviçre'de açık.",
+    "vatNumber": "KDV numarası (opsiyonel)",
+    "agreeTerms": "Affiliate Şartları ve Gizlilik Politikasını kabul ediyorum",
+    "alreadyHaveAccount": "Zaten hesabınız var mı?",
+    "noAccount": "Hesabınız yok mu?",
+    "loginError": "Geçersiz e-posta veya şifre.",
+    "signupError": "Hesap oluşturulamadı. Lütfen tekrar deneyin.",
+    "signupSuccess": "Hesap oluşturuldu! Yönlendiriliyor…",
+    "loading": "Yükleniyor…",
+    "requiredFields": "Ad, e-posta ve şifre zorunludur.",
+    "requiredCountry": "Ülke zorunludur.",
+    "passwordTooShort": "Şifre en az 8 karakter olmalıdır.",
+    "mustAgree": "Kayıt olmak için şartları kabul etmelisiniz."
+  },
+  "dashboard": {
+    "title": "Linklerinizi, tıklamalarınızı ve komisyonlarınızı takip edin",
+    "welcome": "Tekrar hoş geldiniz",
+    "pendingApproval": "Hesabınız onay bekliyor. Link oluşturabilirsiniz ama bir superuser hesabınızı onaylayana kadar tıklamalar komisyon kazandırmaz.",
+    "suspended": "Hesabınız şu anda askıya alınmış. Detaylar için destek ile iletişime geçin.",
+    "activeLinks": "Aktif linkler",
+    "totalClicks": "Toplam tıklama",
+    "referredSellers": "Getirilen satıcılar",
+    "pendingCommission": "Bekleyen komisyon",
+    "confirmedCommission": "Onaylanan komisyon",
+    "quickActions": "Hızlı işlemler",
+    "createLink": "Link oluştur",
+    "viewLinks": "Tüm linkleri gör"
+  },
+  "links": {
+    "title": "Linklerim",
+    "newLink": "Yeni link",
+    "newSubtitle": "Takip edilebilir link oluşturun — herhangi bir ürün, kategori, mağaza ana sayfası veya satıcı kayıt linki.",
+    "type": {
+      "storefront": "Mağaza ana sayfası",
+      "product": "Ürün",
+      "category": "Kategori",
+      "seller_signup": "Satıcı kaydı"
+    },
+    "typeDesc": {
+      "storefront": "Mağaza ana sayfasına yönlendirir",
+      "product": "Belirli bir ürüne yönlendirir — katalogdaki herhangi bir ürün, satıcı onayı gerekmez",
+      "category": "Bir kategori veya koleksiyon sayfasına yönlendirir",
+      "seller_signup": "Satıcı kayıt sayfasına yönlendirir (getirilen satıcının platform komisyonunun %5'i, sürekli)"
+    },
+    "label": "Etiket",
+    "shortUrl": "Kısa URL",
+    "created": "Oluşturulma",
+    "loading": "Yükleniyor…",
+    "noLinks": "Henüz link yok. İlk linkinizi oluşturun.",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı!",
+    "categoryPath": "Kategori yolu",
+    "productSearch": "Ürün ara",
+    "productSearchPlaceholder": "Ürün adı…",
+    "searching": "Aranıyor…",
+    "selectedProduct": "Seçilen",
+    "labelOptional": "Etiket (opsiyonel)",
+    "labelPlaceholder": "ör. Instagram bio linki",
+    "creating": "Oluşturuluyor…",
+    "newError": "Link oluşturulamadı. Lütfen tekrar deneyin.",
+    "newErrorTarget": "Lütfen yukarıdaki link bilgilerini tamamlayın."
+  }
+}

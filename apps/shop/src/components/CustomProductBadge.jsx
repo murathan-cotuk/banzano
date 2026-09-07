@@ -63,13 +63,14 @@ function cornerBoxStyle(b, stackIndex = 0) {
   const stack = stackIndex > 0 ? stackIndex * (size + 2) : 0;
   const oy = badgeOffsetPct(b.offset_y) + stack;
 
-  // Image: width always (default 22%). Height too — defaults to square (matches width) when
-  // the merchant didn't set one, so the box always has real dimensions for next/image's `fill`
-  // mode (avoids the "no width/height reserved" CLS gap PageSpeed flagged on badge images).
+  // Image: width always (default 22%); height only when the merchant explicitly set one —
+  // forcing a square default here squashes non-square badge art (e.g. a wide ribbon) into a
+  // letterboxed box, visibly detaching it from the corner it's supposed to be flush against.
+  // Without an explicit height the <img> below renders at its own natural aspect ratio instead.
   // Text: width/height only when merchant set them (text naturally sizes to its content).
   if (b.badge_type === "image") {
     style.width = `${size}%`;
-    style.height = `${hasH ? badgeSizePct(hRaw, size) : size}%`;
+    if (hasH) style.height = `${badgeSizePct(hRaw, size)}%`;
   } else {
     if (hasW) style.width = `${size}%`;
     if (hasH) style.height = `${badgeSizePct(hRaw, hasW ? size : 22)}%`;
@@ -133,25 +134,57 @@ export default function CustomProductBadge({ badge, stackIndex = 0, locale }) {
   if (b.badge_type === "image") {
     const imageUrl = bt(b, "image_url", locale);
     if (!imageUrl) return null;
+    const hasExplicitHeight = Number.isFinite(Number(b.image_height)) && Number(b.image_height) > 0;
     return (
       <div style={cornerBoxStyle(b, stackIndex)}>
-        <Image
-          className="product-custom-badge-img"
-          src={imageUrl}
-          alt={bt(b, "label", locale) || ""}
-          fill
-          sizes="120px"
-          loading="lazy"
-          style={{
-            objectFit: "contain",
-            padding: 0,
-            margin: 0,
-            border: "none",
-            boxShadow: "none",
-            background: "transparent",
-          }}
-          draggable={false}
-        />
+        {hasExplicitHeight ? (
+          // Both dimensions known → box has real width+height, next/image `fill` can reserve
+          // space for it without distorting the badge's own aspect ratio.
+          <Image
+            className="product-custom-badge-img"
+            src={imageUrl}
+            alt={bt(b, "label", locale) || ""}
+            fill
+            sizes="120px"
+            loading="lazy"
+            style={{
+              objectFit: "contain",
+              padding: 0,
+              margin: 0,
+              border: "none",
+              boxShadow: "none",
+              background: "transparent",
+            }}
+            draggable={false}
+          />
+        ) : (
+          // No configured height → let the image render at its own natural aspect ratio
+          // (width 100%, height auto) instead of forcing it into a square box, which would
+          // letterbox non-square badge art and visibly detach it from the corner it should
+          // sit flush against.
+          <img
+            className="product-custom-badge-img-auto"
+            src={imageUrl}
+            alt={bt(b, "label", locale) || ""}
+            loading="lazy"
+            style={{
+              display: "block",
+              width: "100%",
+              height: "auto",
+              maxWidth: "none",
+              maxHeight: "none",
+              objectFit: "contain",
+              position: "static",
+              inset: "auto",
+              padding: 0,
+              margin: 0,
+              border: "none",
+              boxShadow: "none",
+              background: "transparent",
+            }}
+            draggable={false}
+          />
+        )}
       </div>
     );
   }

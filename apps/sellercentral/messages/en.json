@@ -114,7 +114,11 @@
     "issueLog": "Issue log",
     "transactions": "Transactions",
     "appStore": "App Store",
-    "installed": "Installed"
+    "installed": "Installed",
+    "complianceReview": "Compliance review",
+    "complianceProfiles": "Compliance profiles",
+    "affiliateMarketing": "Affiliate",
+    "affiliateAdmin": "Affiliate admin"
   },
   "rankingPage": {
     "title": "Product ranking in the shop",

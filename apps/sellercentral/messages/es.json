@@ -114,7 +114,11 @@
     "issueLog": "Registro de incidencias",
     "transactions": "Transacciones",
     "appStore": "Tienda de apps",
-    "installed": "Instaladas"
+    "installed": "Instaladas",
+    "complianceReview": "Revisión de cumplimiento",
+    "complianceProfiles": "Perfiles de cumplimiento",
+    "affiliateMarketing": "Afiliados",
+    "affiliateAdmin": "Administración de afiliados"
   },
   "rankingPage": {
     "title": "Clasificación de productos en la tienda",

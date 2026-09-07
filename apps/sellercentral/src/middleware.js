@@ -56,6 +56,27 @@ function redirectToLoginClearingCookie(request, pathname) {
   return res;
 }
 
+// docs/affiliate.md PR 2 — Model 1 (seller referral). Format-only check: this is edge middleware,
+// no DB access, so the code's actual existence/active-status is verified later, at registration
+// submit time (PR 6 wires seller_users.referred_by_affiliate_id from this cookie) — never trust
+// this cookie's contents beyond "looks like a code", it's just carrying a hint forward.
+const AFFILIATE_REF_COOKIE = "andertal_referred_by";
+const AFFILIATE_REF_RE = /^AFF_[0-9A-Z]{8}$/;
+const REGISTER_PATH_RE = /^\/(?:[^/]+\/)?register(\/|$)/;
+
+function captureAffiliateRef(request, response) {
+  if (!REGISTER_PATH_RE.test(request.nextUrl.pathname)) return response;
+  const ref = (request.nextUrl.searchParams.get("ref") || "").trim().toUpperCase();
+  if (!AFFILIATE_REF_RE.test(ref)) return response;
+  response.cookies.set(AFFILIATE_REF_COOKIE, ref, {
+    path: "/",
+    maxAge: 24 * 60 * 60, // config.SELLER_SIGNUP_ATTRIBUTION_WINDOW_HOURS
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  return response;
+}
+
 export default function middleware(request) {
   const { pathname } = request.nextUrl;
 
@@ -70,7 +91,7 @@ export default function middleware(request) {
     }
   }
 
-  return intlMiddleware(request);
+  return captureAffiliateRef(request, intlMiddleware(request));
 }
 
 export const config = {

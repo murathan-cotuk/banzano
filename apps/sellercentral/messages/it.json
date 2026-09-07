@@ -114,7 +114,11 @@
     "issueLog": "Registro problemi",
     "transactions": "Transazioni",
     "appStore": "App Store",
-    "installed": "Installate"
+    "installed": "Installate",
+    "complianceReview": "Verifica di conformità",
+    "complianceProfiles": "Profili di conformità",
+    "affiliateMarketing": "Affiliati",
+    "affiliateAdmin": "Amministrazione affiliati"
   },
   "rankingPage": {
     "title": "Posizionamento prodotti in negozio",

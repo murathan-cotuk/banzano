@@ -210,6 +210,15 @@ const adminHubReturnPATCH = async (req, res) => {
         `UPDATE store_orders SET order_status = 'refunded', updated_at = now() WHERE id = (SELECT order_id FROM store_returns WHERE id = $1::uuid)`,
         [id]
       ).catch(() => {})
+      // docs/affiliate.md PR 4 — claw back any not-yet-paid affiliate commission on this order.
+      try {
+        const { clawbackAffiliateCommissionsForOrder } = require('../modules/affiliate-platform/workers/commission-clawback')
+        const orderIdRow = await client.query(`SELECT order_id FROM store_returns WHERE id = $1::uuid`, [id])
+        const refundedOrderId = orderIdRow.rows[0]?.order_id
+        if (refundedOrderId) await clawbackAffiliateCommissionsForOrder(client, refundedOrderId)
+      } catch (cbErr) {
+        console.warn('clawbackAffiliateCommissionsForOrder:', cbErr?.message || cbErr)
+      }
       // Auto-reverse bonus points on refund, proportional to how much of the order this specific
       // return actually refunded (BonusPunkte.md §3.4). Idempotency is scoped to THIS return
       // (return_id), not the whole order, so a second/third partial refund on the same order still

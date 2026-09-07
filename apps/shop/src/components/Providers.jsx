@@ -18,7 +18,9 @@ import { ProductBadgeStylesProvider } from "@/components/ProductBadgeStylesProvi
 const CartSidebar      = dynamic(() => import("@/components/CartSidebar"),      { ssr: false });
 const ScrollToTopButton = dynamic(() => import("@/components/ScrollToTopButton"), { ssr: false });
 const CookieBanner     = dynamic(() => import("@/components/CookieBanner"),     { ssr: false });
-const MobileShell      = dynamic(() => import("@/components/MobileShell"),      { ssr: false });
+const AffiliateRefCapture = dynamic(() => import("@/components/AffiliateRefCapture"), { ssr: false });
+const AffiliateDisclosureBanner = dynamic(() => import("@/components/AffiliateDisclosureBanner"), { ssr: false });
+import MobileShell from "@/components/MobileShell";
 
 function LenisInit() {
   useLenis();
@@ -46,6 +48,8 @@ export default function Providers({ children }) {
               <CartSidebar />
               <ScrollToTopButton />
               <CookieBanner />
+              <AffiliateRefCapture />
+              <AffiliateDisclosureBanner />
             </MobileBottomNavScrollProvider>
           </CartProvider>
         </WishlistProvider>

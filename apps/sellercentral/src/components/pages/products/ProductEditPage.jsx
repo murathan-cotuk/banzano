@@ -251,7 +251,6 @@ const PRODUCT_COUNTRIES = [
 const PRODUCT_COUNTRIES_MAP = Object.fromEntries(PRODUCT_COUNTRIES.map((c) => [c.code, c]));
 
 /** Pricing country from app locale (globe). AT/CH are not separate here. */
-const COUNTRY_FOR_UI_LOCALE = { de: "DE", en: "US", tr: "TR", fr: "FR", it: "IT", es: "ES" };
 
 function productEditCopy(locale) {
   return {
@@ -554,7 +553,11 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [duplicateOptions, setDuplicateOptions] = useState(DEFAULT_DUPLICATE_OPTIONS);
   const [duplicateSaving, setDuplicateSaving] = useState(false);
-  const editingCountry = COUNTRY_FOR_UI_LOCALE[locale] || "DE";
+  // Pricing must stay EUR/Germany regardless of interface language — a seller reading the UI in
+  // Turkish or English isn't necessarily pricing for the Turkish/US market. There's no separate
+  // manual market selector for this (editingCountry drove both), so this was silently switching
+  // the price section to TRY/USD whenever the seller just changed their own display language.
+  const editingCountry = "DE";
   const [shippingGroupsList, setShippingGroupsList] = useState([]);
   const [metaDefs, setMetaDefs] = useState({});
   const [metaDefSearch, setMetaDefSearch] = useState({});

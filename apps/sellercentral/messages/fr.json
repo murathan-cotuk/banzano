@@ -114,7 +114,11 @@
     "issueLog": "Journal des incidents",
     "transactions": "Transactions",
     "appStore": "App Store",
-    "installed": "Installées"
+    "installed": "Installées",
+    "complianceReview": "Contrôle de conformité",
+    "complianceProfiles": "Profils de conformité",
+    "affiliateMarketing": "Affiliation",
+    "affiliateAdmin": "Administration affiliation"
   },
   "rankingPage": {
     "title": "Classement des produits dans la boutique",

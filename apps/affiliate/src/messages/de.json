@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "links": "Links",
+    "reports": "Berichte",
+    "resources": "Ressourcen",
+    "terms": "AGB",
+    "logout": "Abmelden"
+  },
+  "auth": {
+    "login": "Anmelden",
+    "loginSubtitle": "Willkommen zurück im Affiliate-Portal",
+    "signup": "Konto erstellen",
+    "signupSubtitle": "Dem Andertal-Partnerprogramm beitreten",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "passwordHint": "Mind. 8 Zeichen, mindestens ein Buchstabe und eine Zahl",
+    "fullName": "Vollständiger Name",
+    "companyName": "Firmenname (optional)",
+    "country": "Land",
+    "countryHint": "2-Buchstaben-Code (z. B. DE). Registrierung nur in EU, UK und CH möglich.",
+    "vatNumber": "USt-IdNr. (optional)",
+    "agreeTerms": "Ich akzeptiere die Partnerbedingungen und Datenschutzerklärung",
+    "alreadyHaveAccount": "Bereits ein Konto?",
+    "noAccount": "Noch kein Konto?",
+    "loginError": "Ungültige E-Mail oder Passwort.",
+    "signupError": "Konto konnte nicht erstellt werden. Bitte erneut versuchen.",
+    "signupSuccess": "Konto erstellt! Weiterleitung…",
+    "loading": "Lädt…",
+    "requiredFields": "Name, E-Mail und Passwort sind erforderlich.",
+    "requiredCountry": "Land ist erforderlich.",
+    "passwordTooShort": "Passwort muss mindestens 8 Zeichen haben.",
+    "mustAgree": "Sie müssen den Bedingungen zustimmen, um sich zu registrieren."
+  },
+  "dashboard": {
+    "title": "Links, Klicks und Provisionen im Überblick",
+    "welcome": "Willkommen zurück",
+    "pendingApproval": "Ihr Konto wartet auf Freigabe. Sie können bereits Links erstellen, aber Klicks bringen erst nach Freigabe durch einen Superuser Provision.",
+    "suspended": "Ihr Konto ist derzeit gesperrt. Bitte kontaktieren Sie den Support.",
+    "activeLinks": "Aktive Links",
+    "totalClicks": "Klicks gesamt",
+    "referredSellers": "Geworbene Verkäufer",
+    "pendingCommission": "Ausstehende Provision",
+    "confirmedCommission": "Bestätigte Provision",
+    "quickActions": "Schnellzugriff",
+    "createLink": "Link erstellen",
+    "viewLinks": "Alle Links ansehen"
+  },
+  "links": {
+    "title": "Meine Links",
+    "newLink": "Neuer Link",
+    "newSubtitle": "Trackbaren Link erstellen — für ein beliebiges Produkt, eine Kategorie, den Shop oder die Verkäufer-Registrierung.",
+    "type": {
+      "storefront": "Shop-Startseite",
+      "product": "Produkt",
+      "category": "Kategorie",
+      "seller_signup": "Verkäufer-Registrierung"
+    },
+    "typeDesc": {
+      "storefront": "Verlinkt auf die Shop-Startseite",
+      "product": "Verlinkt auf ein bestimmtes Produkt — jedes Produkt im Katalog, keine Freigabe durch den Verkäufer nötig",
+      "category": "Verlinkt auf eine Kategorie- oder Kollektionsseite",
+      "seller_signup": "Verlinkt auf die Verkäufer-Registrierung (5% der Plattform-Provision des geworbenen Verkäufers, dauerhaft)"
+    },
+    "label": "Bezeichnung",
+    "shortUrl": "Kurz-URL",
+    "created": "Erstellt",
+    "loading": "Lädt…",
+    "noLinks": "Noch keine Links. Erstellen Sie Ihren ersten Link.",
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "categoryPath": "Kategorie-Pfad",
+    "productSearch": "Produkt suchen",
+    "productSearchPlaceholder": "Produktname…",
+    "searching": "Suche…",
+    "selectedProduct": "Ausgewählt",
+    "labelOptional": "Bezeichnung (optional)",
+    "labelPlaceholder": "z. B. Instagram-Bio-Link",
+    "creating": "Wird erstellt…",
+    "newError": "Link konnte nicht erstellt werden. Bitte erneut versuchen.",
+    "newErrorTarget": "Bitte die Link-Details oben vervollständigen."
+  }
+}

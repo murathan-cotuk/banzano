@@ -3656,6 +3656,19 @@ export default function LandingPageEditor() {
     () => groupContainerTypes(containerTypes, uiLocale),
     [containerTypes, uiLocale]
   );
+  const [containerSearch, setContainerSearch] = useState("");
+  const filteredContainerTypeGroups = useMemo(() => {
+    const q = containerSearch.trim().toLowerCase();
+    if (!q) return containerTypeGroups;
+    return containerTypeGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (t) => t.label?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [containerTypeGroups, containerSearch]);
   const client = getMedusaAdminClient();
   const unsaved = useUnsavedChanges();
 
@@ -4555,13 +4568,31 @@ export default function LandingPageEditor() {
           </>
         )}
 
-        <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title={copy.selectContainer} size="large">
+        <Modal
+          open={addModalOpen}
+          onClose={() => { setAddModalOpen(false); setContainerSearch(""); }}
+          title={copy.selectContainer}
+          size="large"
+        >
           <Modal.Section>
             <BlockStack gap="500">
               <Text as="p" variant="bodySm" tone="subdued">
                 {copy.containerGroupsHint}
               </Text>
-              {containerTypeGroups.map((group) => (
+              <TextField
+                label={copy.searchContainers}
+                labelHidden
+                value={containerSearch}
+                onChange={setContainerSearch}
+                placeholder={copy.searchContainersPlaceholder}
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setContainerSearch("")}
+              />
+              {filteredContainerTypeGroups.length === 0 && (
+                <Text as="p" tone="subdued" alignment="center">{copy.noContainersFound}</Text>
+              )}
+              {filteredContainerTypeGroups.map((group) => (
                 <BlockStack key={group.id} gap="300">
                   <Text as="h3" variant="headingSm">{group.label}</Text>
                   <div

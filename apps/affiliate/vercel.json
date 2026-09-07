@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && npm install && turbo run build --filter=@andertal/affiliate",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npm install"
+}

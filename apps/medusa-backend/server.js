@@ -2217,6 +2217,10 @@ async function start() {
     const createCategoriesRouter = require('./src/routes/categories')
     httpApp.use('/', createCategoriesRouter())
 
+    // --- Affiliate platform tracking (public, no auth): extracted to src/routes/affiliate-track.js ---
+    const createAffiliateTrackRouter = require('./src/routes/affiliate-track')
+    httpApp.use('/', createAffiliateTrackRouter())
+
     // --- Admin products/orders + collections: extracted to src/routes/collections.js ---
     const createCollectionsRouter = require('./src/routes/collections')
     httpApp.use('/', createCollectionsRouter())
@@ -2680,6 +2684,14 @@ async function start() {
       getAdminHubProductByIdOrHandleDb,
     }))
 
+    // --- SellerCentral /marketing/affiliate read-only summary: extracted to src/routes/affiliate-seller-marketing.js ---
+    const createAffiliateSellerMarketingRouter = require('./src/routes/affiliate-seller-marketing')
+    httpApp.use('/', createAffiliateSellerMarketingRouter())
+
+    // --- SellerCentral /affiliate-admin (superuser only): extracted to src/routes/affiliate-admin.js ---
+    const createAffiliateAdminRouter = require('./src/routes/affiliate-admin')
+    httpApp.use('/', createAffiliateAdminRouter())
+
     // --- SEO Hub (superuser: entity meta audit / live analyze / auto-generate) ---
     const createSeoHubRouter = require('./src/routes/seo-hub')
     httpApp.use('/', createSeoHubRouter())
@@ -2996,6 +3008,44 @@ async function start() {
       setInterval(() => runAbandonedCartScan().catch(() => {}), 15 * 60 * 1000)
     }, 50 * 1000) // 50s delay after startup
 
+    // docs/affiliate.md PR 4 — promotes affiliate_commissions past their 30-day hold to
+    // 'confirmed'. Doc calls for a daily cron; every 6h is just a more prompt version of the same
+    // idempotent "past confirmable_at → confirmed" check, no different in effect.
+    setTimeout(() => {
+      const { confirmDueAffiliateCommissions } = require('./src/modules/affiliate-platform/workers/commission-confirm')
+      confirmDueAffiliateCommissions().catch(() => {})
+      setInterval(() => confirmDueAffiliateCommissions().catch(() => {}), 6 * 60 * 60 * 1000)
+    }, 60 * 1000) // 60s delay after startup
+
+    // docs/affiliate.md PR 6 — "cron, ayın 1'i" (Model 1, seller referral, previous calendar
+    // month). No cron lib in this codebase (house pattern is setInterval) — check every 6h and
+    // only actually run the worker on the 1st of the UTC month; the worker's own idempotency
+    // check (an existing commission row for that seller+period) makes firing 4x on that one day
+    // harmless rather than needing exact once-a-month timing.
+    setTimeout(() => {
+      const { runSellerReferralMonthly } = require('./src/modules/affiliate-platform/workers/seller-referral-monthly')
+      const runIfFirstOfMonth = () => {
+        if (new Date().getUTCDate() !== 1) return
+        runSellerReferralMonthly().catch(() => {})
+      }
+      runIfFirstOfMonth()
+      setInterval(runIfFirstOfMonth, 6 * 60 * 60 * 1000)
+    }, 70 * 1000) // 70s delay after startup
+
+    // docs/affiliate.md PR 7 — real Stripe transfers. Registering this is safe even before the
+    // Steuerberater compliance gate is satisfied: runMonthlyAffiliatePayouts no-ops entirely
+    // unless AFFILIATE_PAYOUTS_ENABLED=true (see payout-scheduler.js), which is not set anywhere
+    // in this codebase's .env.example — it has to be a deliberate production opt-in.
+    setTimeout(() => {
+      const { runMonthlyAffiliatePayouts } = require('./src/modules/affiliate-platform/payout-scheduler')
+      const runIfFirstOfMonth = () => {
+        if (new Date().getUTCDate() !== 1) return
+        runMonthlyAffiliatePayouts().catch(() => {})
+      }
+      runIfFirstOfMonth()
+      setInterval(runIfFirstOfMonth, 6 * 60 * 60 * 1000)
+    }, 80 * 1000) // 80s delay after startup
+
     startFlowQueueWorker({
       onOrderEvent: async (jobData) => {
         await runAutomationFlowsForOrder({
@@ -3022,6 +3072,11 @@ async function start() {
       const createDeveloperApiRouter = require('./src/routes/developer-api')
       httpApp.use('/developer-api/v1', createDeveloperApiRouter())
     } catch (e) { console.warn('developer-api mount failed:', e?.message) }
+
+    try {
+      const createAffiliateApiRouter = require('./src/routes/affiliate-api')
+      httpApp.use('/affiliate-api/v1', createAffiliateApiRouter())
+    } catch (e) { console.warn('affiliate-api mount failed:', e?.message) }
 
     try {
       const createAppOAuthRouter = require('./src/routes/app-oauth')

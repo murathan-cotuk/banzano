@@ -554,6 +554,74 @@ const adminHubComplianceProfilesGET = (req, res) => {
   }
 }
 
+// GET /admin-hub/v1/categories/compliance-overview — superuser only. Every category's effective
+// compliance profile (own override vs. inherited vs. default fallback) in one call, for
+// ComplianceProfilesPage's overview table — resolving all categories one-by-one via
+// resolveCategoryComplianceProfileId would be N ancestor-walk queries; this does a single
+// SELECT and walks parent_id chains in memory instead.
+const adminHubComplianceOverviewGET = async (req, res) => {
+  const client = getCategoriesPgClient()
+  if (!client) return categoriesPgUnavailable(res)
+  try {
+    const { resolveComplianceProfile, DEFAULT_PROFILE_ID } = require('../compliance/resolve-compliance')
+    await client.connect()
+    const r = await client.query('SELECT id, name, slug, parent_id, metadata FROM admin_hub_categories ORDER BY sort_order ASC, name ASC')
+    await client.end()
+
+    const byId = new Map(r.rows.map((row) => [row.id, row]))
+    const resolvedCache = new Map()
+    const resolveOwnProfileId = (row) => {
+      const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {}
+      return meta.compliance_profile_id || null
+    }
+    const resolveForId = (id) => {
+      if (resolvedCache.has(id)) return resolvedCache.get(id)
+      const chain = []
+      let cursorId = id
+      const seen = new Set()
+      let found = null
+      while (cursorId && !seen.has(cursorId)) {
+        seen.add(cursorId)
+        const row = byId.get(cursorId)
+        if (!row) break
+        chain.push(cursorId)
+        const own = resolveOwnProfileId(row)
+        if (own) { found = { profileId: own, fromId: cursorId }; break }
+        cursorId = row.parent_id || null
+      }
+      for (const chainId of chain) resolvedCache.set(chainId, found)
+      if (!resolvedCache.has(id)) resolvedCache.set(id, found)
+      return found
+    }
+
+    const categories = r.rows.map((row) => {
+      const ownProfileId = resolveOwnProfileId(row)
+      const found = resolveForId(row.id)
+      const effectiveProfileId = found?.profileId || DEFAULT_PROFILE_ID
+      const resolvedFrom = ownProfileId ? 'own' : found ? 'inherited' : 'default'
+      let profileLabelI18n = {}
+      try {
+        profileLabelI18n = resolveComplianceProfile(effectiveProfileId).profile_label_i18n || {}
+      } catch (_) { /* unknown profile id — leave label empty, id still shown */ }
+      return {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        parent_id: row.parent_id,
+        own_profile_id: ownProfileId,
+        effective_profile_id: effectiveProfileId,
+        effective_profile_label_i18n: profileLabelI18n,
+        resolved_from: resolvedFrom,
+      }
+    })
+    res.json({ categories })
+  } catch (e) {
+    try { await client.end() } catch (_) {}
+    console.error('Category compliance-overview GET:', e)
+    res.status(500).json({ message: (e && e.message) || 'Internal server error' })
+  }
+}
+
 // PATCH /admin-hub/v1/categories/:id/compliance-profile — superuser only. Sets or clears
 // (profile_id: null) this category's OWN compliance_profile_id override. Clearing makes it fall
 // back to whatever its nearest ancestor (or the default profile) resolves to — see
@@ -612,6 +680,7 @@ module.exports = function createCategoriesRouter() {
   router.get('/admin-hub/v1/categories', (req, res) => adminHubCategoriesGET(req, res))
   router.post('/admin-hub/v1/categories', (req, res) => adminHubCategoriesPOST(req, res))
   router.get('/admin-hub/v1/categories/:id/compliance-schema', (req, res) => adminHubCategoryComplianceSchemaGET(req, res))
+  router.get('/admin-hub/v1/categories/compliance-overview', requireSuperuser, adminHubComplianceOverviewGET)
   router.get('/admin-hub/v1/categories/:id', (req, res) => adminHubCategoryByIdGET(req, res))
   router.put('/admin-hub/v1/categories/:id', (req, res) => adminHubCategoryByIdPUT(req, res))
   router.delete('/admin-hub/v1/categories/:id', (req, res) => adminHubCategoryByIdDELETE(req, res))

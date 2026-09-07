@@ -242,5 +242,8 @@ export const config = {
   // apple-icon.png) — they have no dot in the path so the `.*\..*` exclusion below doesn't
   // catch them, and without this they get swept into intlMiddleware and 307-redirected to a
   // locale-prefixed path (e.g. /en/icon), which broke the favicon / apple-touch-icon entirely.
-  matcher: ["/((?!api|_next|_vercel|monitoring|icon$|apple-icon$|.*\\..*).*)"],
+  // `r/*` is the affiliate short-link redirect (docs/affiliate.md) — it must reach
+  // src/app/r/[code]/route.js directly, un-prefixed; letting it fall through to intlMiddleware
+  // would 307 it to e.g. /de/r/abc123 and the short link would 404.
+  matcher: ["/((?!api|_next|_vercel|monitoring|icon$|apple-icon$|r/|.*\\..*).*)"],
 };

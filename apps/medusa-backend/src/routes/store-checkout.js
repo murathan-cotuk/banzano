@@ -3413,6 +3413,10 @@ const storeOrdersPOST = async (req, res) => {
   const body = req.body || {}
   const cartId = (body.cart_id || body.cartId || '').toString().trim()
   if (!cartId) return res.status(400).json({ message: 'cart_id required' })
+  // docs/affiliate.md PR 4 — optional, only present when the shop's checkout page found a
+  // consented-to __atrl cookie. Never validated/required here; purely a hint for the
+  // fire-and-forget commission-recalc call after the order is created.
+  const affiliateCookieId = (body.affiliate_cookie_id || '').toString().trim() || null
 
   const authHdr = (req.headers.authorization || '').toString()
   const bearerTok = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : ''
@@ -3865,6 +3869,18 @@ const storeOrdersPOST = async (req, res) => {
     res.status(201).json({ order })
     // Fire-and-forget AFTER response — must be outside try so a failure cannot trigger the 500 catch handler
     void dispatchOrderFlowEvent('order_placed', orderId)
+    // docs/affiliate.md PR 4 — no-op when the checkout payload didn't include an affiliate_cookie_id
+    // (the vast majority of orders; only visitors who arrived via a consented affiliate link have one).
+    if (affiliateCookieId) {
+      void require('../modules/affiliate-platform/workers/commission-recalc')
+        .recalcAffiliateCommissionForOrder({
+          orderId, cookieId: affiliateCookieId, sellerId,
+          platformCommissionCents: platformFeeMerchandiseBasis,
+          grossAmountCents: sellerScopedBasisCents,
+          customerEmail: email,
+        })
+        .catch((e) => console.warn('recalcAffiliateCommissionForOrder:', e?.message || e))
+    }
   } catch (err) {
     if (client) try { await client.end() } catch (_) {}
     console.error('Store orders POST:', err)

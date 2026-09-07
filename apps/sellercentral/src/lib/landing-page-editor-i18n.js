@@ -199,6 +199,16 @@ export function getLandingEditorCopy(locale) {
       "Raggruppati per uso — l’anteprima mostra il layout approssimativo",
       "Nach Zweck gruppiert — die Vorschau zeigt das ungefähre Shop-Layout"
     ),
+    searchContainers: x("Search containers", "Konteyner ara", "Rechercher un conteneur", "Buscar contenedor", "Cerca contenitore", "Container suchen"),
+    searchContainersPlaceholder: x("Search…", "Ara…", "Rechercher…", "Buscar…", "Cerca…", "Suchen…"),
+    noContainersFound: x(
+      "No containers match your search.",
+      "Aramanızla eşleşen konteyner yok.",
+      "Aucun conteneur ne correspond à votre recherche.",
+      "Ningún contenedor coincide con tu búsqueda.",
+      "Nessun contenitore corrisponde alla ricerca.",
+      "Keine Container entsprechen Ihrer Suche."
+    ),
     choose: x("Choose", "Seç", "Choisir", "Elegir", "Scegli", "Auswählen"),
     visible: x("Visible", "Görünür", "Visible", "Visible", "Visibile", "Sichtbar"),
     hidden: x("Hidden", "Gizli", "Masqué", "Oculto", "Nascosto", "Versteckt"),

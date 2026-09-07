@@ -494,6 +494,12 @@ class MedusaAdminClient {
     return { profiles: data.profiles || [] }
   }
 
+  /** Superuser: every category's effective compliance profile (own/inherited/default) in one call. */
+  async getComplianceOverview() {
+    const data = await this.request('/admin-hub/v1/categories/compliance-overview').catch(() => ({ categories: [] }))
+    return { categories: data.categories || [] }
+  }
+
   /** Superuser: set (profileId) or clear (null) a category's own compliance profile override. */
   async setCategoryComplianceProfile(categoryId, profileId) {
     return this.request(`/admin-hub/v1/categories/${categoryId}/compliance-profile`, {
@@ -1864,6 +1870,38 @@ class MedusaAdminClient {
     if (params.model) qs.set("model", params.model);
     const q = qs.toString();
     return this.request(`/admin-hub/v1/campaigns/attribution${q ? "?" + q : ""}`);
+  }
+
+  /** Read-only affiliate summary for the logged-in seller's own products (docs/affiliate.md PR 5). */
+  async getAffiliateMarketingSummary() {
+    return this.request(`/admin-hub/v1/affiliate-marketing/summary`);
+  }
+
+  // ── Affiliate admin (superuser only, docs/affiliate.md PR 8) ─────────────────
+  async getAffiliateAdminPending() {
+    return this.request(`/admin-hub/v1/affiliate-admin/pending`);
+  }
+  async approveAffiliate(id) {
+    return this.request(`/admin-hub/v1/affiliate-admin/${id}/approve`, { method: "POST" });
+  }
+  async rejectAffiliate(id, reason) {
+    return this.request(`/admin-hub/v1/affiliate-admin/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
+  }
+  async getAffiliateFraudQueue(severity) {
+    const qs = severity ? `?severity=${encodeURIComponent(severity)}` : "";
+    return this.request(`/admin-hub/v1/affiliate-admin/fraud${qs}`);
+  }
+  async resolveAffiliateFraudFlag(id, action) {
+    return this.request(`/admin-hub/v1/affiliate-admin/fraud/${id}/resolve`, { method: "POST", body: JSON.stringify({ action }) });
+  }
+  async getAffiliatePayoutHistory() {
+    return this.request(`/admin-hub/v1/affiliate-admin/payouts`);
+  }
+  async logAffiliateManualFraudFlag({ affiliate_code, flag_type, severity, notes }) {
+    return this.request(`/admin-hub/v1/affiliate-admin/fraud`, {
+      method: "POST",
+      body: JSON.stringify({ affiliate_code, flag_type, severity, notes }),
+    });
   }
 
   async getMarketingAnalytics(params = {}) {

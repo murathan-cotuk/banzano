@@ -423,6 +423,19 @@ const adminHubComplianceReviewGET = async (req, res) => {
        ORDER BY (metadata->'compliance_review'->>'checked_at') DESC
        LIMIT 500
     `)
+    const sellerIds = [...new Set(r.rows.map((row) => row.seller_id).filter(Boolean))]
+    const storeNameById = {}
+    if (sellerIds.length) {
+      const nameRes = await client.query(
+        'SELECT seller_id, store_name FROM admin_hub_seller_settings WHERE seller_id = ANY($1)',
+        [sellerIds],
+      )
+      for (const row of nameRes.rows) {
+        if (row.store_name != null && String(row.store_name).trim() !== '') {
+          storeNameById[row.seller_id] = String(row.store_name).trim()
+        }
+      }
+    }
     await client.end()
     const { resolveComplianceProfile } = require('../compliance/resolve-compliance')
     res.json({
@@ -443,6 +456,7 @@ const adminHubComplianceReviewGET = async (req, res) => {
           title: row.title,
           handle: row.handle,
           seller_id: row.seller_id,
+          seller_name: row.seller_id ? (storeNameById[row.seller_id] || null) : null,
           status: row.status,
           profile_id: profileId,
           profile_label_i18n: profileLabelI18n,

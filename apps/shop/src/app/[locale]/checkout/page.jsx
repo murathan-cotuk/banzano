@@ -27,6 +27,7 @@ import { useMarketPrefix } from "@/context/MarketPrefixContext";
 import { storefrontProductHandle } from "@/lib/product-url-handle";
 import { getShippableCountries } from "@/lib/countries";
 import { resolveFreeShippingThresholdCents } from "@/lib/free-shipping-threshold";
+import { readAffiliateCookieId } from "@/lib/affiliate";
 import { findShippingGroup, resolveShippingQuoteCents } from "@/lib/shipping-price";
 import { normalizeIsoCountryCode } from "@/lib/iso-country";
 import { CHECKOUT_SHIPPING_COUNTRY_LS, CHECKOUT_SHIPPING_MARKET_COUNTRY_LS } from "@/hooks/useShippingCountryForQuotes";
@@ -124,6 +125,9 @@ function buildOrderPayload(cartId, paymentIntentId, shippingCents, contact, bill
     billing_city: billing.billing_city,
     billing_postal_code: billing.billing_postal_code,
     billing_country: billing.billing_country,
+    // Optional — only present when the visitor arrived via a consented-to affiliate link
+    // (docs/affiliate.md). Backend ignores it entirely if absent; no effect on pricing/payment.
+    affiliate_cookie_id: readAffiliateCookieId() || undefined,
   };
 }
 

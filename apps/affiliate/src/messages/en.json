@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "links": "Links",
+    "reports": "Reports",
+    "resources": "Resources",
+    "terms": "Terms",
+    "logout": "Log out"
+  },
+  "auth": {
+    "login": "Sign in",
+    "loginSubtitle": "Welcome back to the affiliate portal",
+    "signup": "Create account",
+    "signupSubtitle": "Join the Andertal affiliate program",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "Min. 8 characters, at least one letter and one number",
+    "fullName": "Full name",
+    "companyName": "Company name (optional)",
+    "country": "Country",
+    "countryHint": "2-letter code (e.g. DE). Affiliate signups are only open in the EU, UK, and CH.",
+    "vatNumber": "VAT number (optional)",
+    "agreeTerms": "I agree to the Affiliate Terms and Privacy Policy",
+    "alreadyHaveAccount": "Already have an account?",
+    "noAccount": "Don't have an account?",
+    "loginError": "Invalid email or password.",
+    "signupError": "Could not create account. Please try again.",
+    "signupSuccess": "Account created! Redirecting…",
+    "loading": "Loading…",
+    "requiredFields": "Name, email, and password are required.",
+    "requiredCountry": "Country is required.",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "mustAgree": "You must accept the terms to register."
+  },
+  "dashboard": {
+    "title": "Track your links, clicks, and commissions",
+    "welcome": "Welcome back",
+    "pendingApproval": "Your account is pending approval. You can already generate links, but clicks won't earn commission until a superuser approves your account.",
+    "suspended": "Your account is currently suspended. Contact support for details.",
+    "activeLinks": "Active links",
+    "totalClicks": "Total clicks",
+    "referredSellers": "Referred sellers",
+    "pendingCommission": "Pending commission",
+    "confirmedCommission": "Confirmed commission",
+    "quickActions": "Quick actions",
+    "createLink": "Create link",
+    "viewLinks": "View all links"
+  },
+  "links": {
+    "title": "My links",
+    "newLink": "New link",
+    "newSubtitle": "Generate a trackable link — any catalog product, category, the storefront, or a seller signup link.",
+    "type": {
+      "storefront": "Storefront",
+      "product": "Product",
+      "category": "Category",
+      "seller_signup": "Seller signup"
+    },
+    "typeDesc": {
+      "storefront": "Links to the shop homepage",
+      "product": "Links to a specific product — any product in the catalog, no seller approval needed",
+      "category": "Links to a category or collection page",
+      "seller_signup": "Links to the seller registration page (5% of the referred seller's platform commission, ongoing)"
+    },
+    "label": "Label",
+    "shortUrl": "Short URL",
+    "created": "Created",
+    "loading": "Loading…",
+    "noLinks": "No links yet. Create your first link to get started.",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "categoryPath": "Category path",
+    "productSearch": "Search product",
+    "productSearchPlaceholder": "Product name…",
+    "searching": "Searching…",
+    "selectedProduct": "Selected",
+    "labelOptional": "Label (optional)",
+    "labelPlaceholder": "e.g. Instagram bio link",
+    "creating": "Creating…",
+    "newError": "Could not create link. Please try again.",
+    "newErrorTarget": "Please complete the link details above."
+  }
+}

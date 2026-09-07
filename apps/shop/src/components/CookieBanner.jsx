@@ -143,6 +143,13 @@ export default function CookieBanner() {
 
   const save = (consent) => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(consent)); } catch {}
+    try {
+      // Mirrored as a cookie (not just localStorage) so server-side routes can read consent
+      // state too — e.g. the /r/[code] affiliate-link redirect and /api/affiliate-track need to
+      // know whether the "marketing" category was accepted before setting the __atrl tracking
+      // cookie, and localStorage isn't visible to a server request.
+      document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(consent))}; path=/; max-age=${180 * 86400}; SameSite=Lax`;
+    } catch {}
     dispatchConsentEvent(consent);
     setVisible(false);
     setShowManage(false);

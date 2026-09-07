@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "links": "Liens",
+    "reports": "Rapports",
+    "resources": "Ressources",
+    "terms": "Conditions",
+    "logout": "Déconnexion"
+  },
+  "auth": {
+    "login": "Se connecter",
+    "loginSubtitle": "Bienvenue sur le portail affiliés",
+    "signup": "Créer un compte",
+    "signupSubtitle": "Rejoindre le programme d'affiliation Andertal",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "passwordHint": "Min. 8 caractères, au moins une lettre et un chiffre",
+    "fullName": "Nom complet",
+    "companyName": "Nom de l'entreprise (optionnel)",
+    "country": "Pays",
+    "countryHint": "Code à 2 lettres (ex. DE). Inscription ouverte uniquement dans l'UE, au Royaume-Uni et en Suisse.",
+    "vatNumber": "Numéro de TVA (optionnel)",
+    "agreeTerms": "J'accepte les Conditions d'affiliation et la Politique de confidentialité",
+    "alreadyHaveAccount": "Vous avez déjà un compte ?",
+    "noAccount": "Pas de compte ?",
+    "loginError": "E-mail ou mot de passe invalide.",
+    "signupError": "Impossible de créer le compte. Veuillez réessayer.",
+    "signupSuccess": "Compte créé ! Redirection…",
+    "loading": "Chargement…",
+    "requiredFields": "Le nom, l'e-mail et le mot de passe sont requis.",
+    "requiredCountry": "Le pays est requis.",
+    "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères.",
+    "mustAgree": "Vous devez accepter les conditions pour vous inscrire."
+  },
+  "dashboard": {
+    "title": "Suivez vos liens, clics et commissions",
+    "welcome": "Bon retour",
+    "pendingApproval": "Votre compte est en attente d'approbation. Vous pouvez déjà créer des liens, mais les clics ne généreront de commission qu'après approbation par un superuser.",
+    "suspended": "Votre compte est actuellement suspendu. Contactez le support pour plus de détails.",
+    "activeLinks": "Liens actifs",
+    "totalClicks": "Clics totaux",
+    "referredSellers": "Vendeurs parrainés",
+    "pendingCommission": "Commission en attente",
+    "confirmedCommission": "Commission confirmée",
+    "quickActions": "Actions rapides",
+    "createLink": "Créer un lien",
+    "viewLinks": "Voir tous les liens"
+  },
+  "links": {
+    "title": "Mes liens",
+    "newLink": "Nouveau lien",
+    "newSubtitle": "Générez un lien traçable — pour n'importe quel produit du catalogue, une catégorie, la boutique ou l'inscription vendeur.",
+    "type": {
+      "storefront": "Boutique",
+      "product": "Produit",
+      "category": "Catégorie",
+      "seller_signup": "Inscription vendeur"
+    },
+    "typeDesc": {
+      "storefront": "Renvoie vers la page d'accueil de la boutique",
+      "product": "Renvoie vers un produit précis — n'importe quel produit du catalogue, aucune approbation du vendeur requise",
+      "category": "Renvoie vers une page de catégorie ou de collection",
+      "seller_signup": "Renvoie vers la page d'inscription vendeur (5 % de la commission plateforme du vendeur parrainé, en continu)"
+    },
+    "label": "Libellé",
+    "shortUrl": "URL courte",
+    "created": "Créé",
+    "loading": "Chargement…",
+    "noLinks": "Aucun lien pour l'instant. Créez votre premier lien.",
+    "copy": "Copier",
+    "copied": "Copié !",
+    "categoryPath": "Chemin de catégorie",
+    "productSearch": "Rechercher un produit",
+    "productSearchPlaceholder": "Nom du produit…",
+    "searching": "Recherche…",
+    "selectedProduct": "Sélectionné",
+    "labelOptional": "Libellé (optionnel)",
+    "labelPlaceholder": "ex. Lien bio Instagram",
+    "creating": "Création…",
+    "newError": "Impossible de créer le lien. Veuillez réessayer.",
+    "newErrorTarget": "Veuillez compléter les détails du lien ci-dessus."
+  }
+}
