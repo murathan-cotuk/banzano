@@ -857,7 +857,14 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       unsaved.clearHandlers();
       unsaved.setDirty(false);
     };
-  }, [unsaved]);
+    // Deliberately NOT depending on `unsaved` itself: the context's memoized value gets a new
+    // object identity every time isDirty changes, which would re-run this effect (and its
+    // cleanup — clearHandlers + setDirty(false)) on every dirty-state toggle, wiping the Save/
+    // Discard bar out immediately after it appears. setHandlers/clearHandlers/setDirty are all
+    // stable identities (useCallback / raw useState setter), so this only needs to register once
+    // per mount and clean up once on real unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unsaved?.setHandlers, unsaved?.clearHandlers, unsaved?.setDirty]);
 
   const meta = product?.metadata && typeof product.metadata === "object" ? product.metadata : {};
 
