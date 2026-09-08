@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { useLt } from "@/lib/use-locale-text";
 import { dateLocaleFor } from "@/lib/locale-text";
@@ -159,7 +160,7 @@ function CustomerReviewsPage() {
       <td style={{ padding: "10px 12px", minWidth: 180 }}>
         {r.customer_id ? (
           <button
-            onClick={() => router.push(`/${routeLocale}/customers/${r.customer_id}`)}
+            onClick={() => router.push(`/customers/${r.customer_id}`)}
             style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
           >
             {r.customer_number && (

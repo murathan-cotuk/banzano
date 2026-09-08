@@ -2,6 +2,12 @@
 const { Router } = require('express')
 const { applyEuOriginMetadataPolicy, registerEuOriginRoutes } = require('../eu-origin')
 const { buildCatalogMaps, scanProductCatalogPending } = require('../catalog-metafield-pending')
+const {
+  isPlaceholderHandle,
+  parseProductUrlHandle,
+  resolveNonPlaceholderHandle,
+  patchPlaceholderTranslationHandles,
+} = require('../product-url-handle')
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -477,11 +483,31 @@ const createAdminHubProductDb = async (body) => {
   if (!client) return null
   try {
     await client.connect()
-    const title = (body.title || '').trim() || 'Untitled'
-    const handle = (body.handle || body.slug || slugifyTitle(title) || 'product-' + Date.now()).trim()
+    let title = (body.title || '').trim() || 'Untitled'
+    let handle = (body.handle || body.slug || '').trim()
     const price = typeof body.price === 'number' ? Math.round(body.price * 100) : parseInt(body.price, 10) || 0
     const inventory = parseInt(body.inventory, 10) || 0
-    const metaObj = body.metadata && typeof body.metadata === 'object' ? normalizeProductMetadata(body.metadata) : null
+    let metaObj = body.metadata && typeof body.metadata === 'object' ? normalizeProductMetadata(body.metadata) : null
+    let description = (body.description || '').trim() || null
+    let autoTranslatedLocales = []
+    if (body.auto_translate !== false) {
+      try {
+        const { applyProductAutoTranslate } = require('../product-auto-translate')
+        const applied = await applyProductAutoTranslate(
+          { metadata: metaObj || {}, title, description: description || '' },
+          { sourceLocale: body.source_locale },
+        )
+        metaObj = applied.metadata
+        autoTranslatedLocales = applied.translatedLocales || []
+        if (applied.title) title = applied.title
+        if (applied.description != null) description = applied.description
+      } catch (e) {
+        console.warn('createAdminHubProductDb auto-translate:', e && e.message)
+      }
+    }
+    handle = resolveNonPlaceholderHandle(handle, slugifyTitle(title))
+    if (isPlaceholderHandle(handle)) handle = slugifyTitle(title) || ('product-' + Date.now())
+    if (metaObj) patchPlaceholderTranslationHandles(metaObj, handle, slugifyTitle)
     const variantsArr = body.variants && Array.isArray(body.variants) ? body.variants : null
     const gpsrValidation = validateRequiredGpsrForProduct(metaObj || {}, variantsArr)
     if (!gpsrValidation.ok) { await client.end(); return { __error: gpsrValidation.message || 'GPSR validation failed' } }
@@ -496,7 +522,7 @@ const createAdminHubProductDb = async (body) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at`,
       [
-        title, handle, (body.sku || '').trim() || null, (body.description || '').trim() || null,
+        title, handle, (body.sku || '').trim() || null, description,
         (body.status || 'draft').trim() || 'draft', (body.seller || body.seller_id || '').trim() || null,
         body.collection_id || null, price, inventory, metadata, variants,
       ]
@@ -511,6 +537,7 @@ const createAdminHubProductDb = async (body) => {
       collection_id: r.collection_id, price: r.price_cents != null ? r.price_cents / 100 : 0,
       price_cents: r.price_cents, inventory: r.inventory != null ? r.inventory : 0,
       metadata: r.metadata, variants: r.variants, created_at: r.created_at, updated_at: r.updated_at,
+      ...(autoTranslatedLocales.length ? { auto_translated_locales: autoTranslatedLocales } : {}),
     }
   } catch (e) {
     try { await client.end() } catch (_) {}
@@ -526,22 +553,44 @@ const getAdminHubProductByIdOrHandleDb = async (idOrHandle) => {
     await client.connect()
     const val = String(idOrHandle || '').trim()
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+    const hubCols = 'id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at'
     let res
     if (isUuid) {
       res = await client.query(
-        'SELECT id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at FROM admin_hub_products WHERE id = $1',
+        `SELECT ${hubCols} FROM admin_hub_products WHERE id = $1`,
         [val]
       )
     } else {
-      res = await client.query(
-        'SELECT id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at FROM admin_hub_products WHERE LOWER(handle) = LOWER($1)',
-        [val]
-      )
-      if (!res.rows || !res.rows[0]) {
-        res = await client.query(
-          'SELECT id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at FROM admin_hub_products WHERE EXISTS (SELECT 1 FROM jsonb_each(COALESCE(metadata->\'translations\', \'{}\'::jsonb)) AS tr(locale_key, tr_data) WHERE tr_data ? \'handle\' AND LENGTH(TRIM(COALESCE(tr_data->>\'handle\', \'\'))) > 0 AND LOWER(TRIM(tr_data->>\'handle\')) = LOWER($1)) LIMIT 1',
-          [val]
-        )
+      const parsed = parseProductUrlHandle(val)
+      const attempts = []
+      // Shop URLs are {handle}-a-{8chars} of the UUID. Resolve by suffix first so
+      // leftover placeholder handles like "untitled" cannot collide or go stale.
+      if (parsed.shortCode) {
+        attempts.push([
+          `SELECT ${hubCols} FROM admin_hub_products
+           WHERE RIGHT(REPLACE(LOWER(id::text), '-', ''), 8) = $1
+           ORDER BY CASE WHEN LOWER(COALESCE(handle, '')) = LOWER($2) THEN 0 ELSE 1 END, updated_at DESC NULLS LAST
+           LIMIT 1`,
+          [parsed.shortCode, parsed.base || ''],
+        ])
+      }
+      attempts.push([
+        `SELECT ${hubCols} FROM admin_hub_products WHERE LOWER(handle) = LOWER($1)`,
+        [val],
+      ])
+      if (parsed.base && parsed.base.toLowerCase() !== val.toLowerCase()) {
+        attempts.push([
+          `SELECT ${hubCols} FROM admin_hub_products WHERE LOWER(handle) = LOWER($1) ORDER BY updated_at DESC LIMIT 1`,
+          [parsed.base],
+        ])
+      }
+      attempts.push([
+        `SELECT ${hubCols} FROM admin_hub_products WHERE EXISTS (SELECT 1 FROM jsonb_each(COALESCE(metadata->'translations', '{}'::jsonb)) AS tr(locale_key, tr_data) WHERE tr_data ? 'handle' AND LENGTH(TRIM(COALESCE(tr_data->>'handle', ''))) > 0 AND LOWER(TRIM(tr_data->>'handle')) = LOWER($1)) LIMIT 1`,
+        [parsed.base || val],
+      ])
+      for (const [sql, params] of attempts) {
+        res = await client.query(sql, params)
+        if (res.rows && res.rows[0]) break
       }
     }
     await client.end()
@@ -569,10 +618,10 @@ const updateAdminHubProductDb = async (id, body) => {
     if (!existing) return null
     const uuid = existing.id
     await client.connect()
-    const title = body.title !== undefined ? String(body.title).trim() || existing.title : existing.title
-    const handle = body.handle !== undefined ? String(body.handle).trim() || existing.handle : existing.handle
+    let title = body.title !== undefined ? String(body.title).trim() || existing.title : existing.title
+    let handle = body.handle !== undefined ? String(body.handle).trim() || existing.handle : existing.handle
     const sku = body.sku !== undefined ? (body.sku === '' ? null : String(body.sku).trim()) : existing.sku
-    const description = body.description !== undefined ? (body.description === '' ? null : String(body.description)) : existing.description
+    let description = body.description !== undefined ? (body.description === '' ? null : String(body.description)) : existing.description
     const status = body.status !== undefined ? String(body.status).trim() || 'draft' : existing.status
     const price = body.price !== undefined ? Math.round(Number(body.price) * 100) : (existing.price != null ? Math.round(Number(existing.price) * 100) : 0)
     const inventory = body.inventory !== undefined ? parseInt(body.inventory, 10) || 0 : (existing.inventory ?? 0)
@@ -593,6 +642,25 @@ const updateAdminHubProductDb = async (id, body) => {
     const nextVariantsArr = body.variants !== undefined
       ? (Array.isArray(body.variants) ? body.variants : [])
       : (Array.isArray(existing.variants) ? existing.variants : [])
+    let autoTranslatedLocales = []
+    if (!skipComplianceGates && body.auto_translate !== false) {
+      try {
+        const { applyProductAutoTranslate } = require('../product-auto-translate')
+        const existingTr = existing.metadata && typeof existing.metadata === 'object' ? existing.metadata.translations : {}
+        const applied = await applyProductAutoTranslate(
+          { metadata: metadataObj || {}, title, description: description || '' },
+          { sourceLocale: body.source_locale, previousTranslations: existingTr },
+        )
+        metadataObj = applied.metadata
+        autoTranslatedLocales = applied.translatedLocales || []
+        if (applied.title) title = applied.title
+        if (applied.description != null) description = applied.description
+      } catch (e) {
+        console.warn('updateAdminHubProductDb auto-translate:', e && e.message)
+      }
+    }
+    handle = resolveNonPlaceholderHandle(handle, slugifyTitle(title))
+    if (metadataObj) patchPlaceholderTranslationHandles(metadataObj, handle, slugifyTitle)
     if (!skipComplianceGates) {
       const gpsrValidation = validateRequiredGpsrForProduct(metadataObj || {}, nextVariantsArr)
       if (!gpsrValidation.ok) { await client.end(); return { __error: gpsrValidation.message || 'GPSR validation failed' } }
@@ -612,7 +680,9 @@ const updateAdminHubProductDb = async (id, body) => {
     )
     await client.end()
     stampComplianceReviewAsync(uuid, metadataObj).catch(() => {})
-    return await getAdminHubProductByIdOrHandleDb(uuid)
+    const saved = await getAdminHubProductByIdOrHandleDb(uuid)
+    if (saved && autoTranslatedLocales.length) saved.auto_translated_locales = autoTranslatedLocales
+    return saved
   } catch (e) {
     try { await client.end() } catch (_) {}
     console.warn('updateAdminHubProductDb:', e && e.message)

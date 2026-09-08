@@ -267,7 +267,23 @@
       "Bash(node _verify_seller_marketing_tmp.js)",
       "Bash(rm -f _verify_seller_marketing_tmp.js)",
       "Bash(node scripts/_tmp-verify-pr9-brandbid.js)",
-      "Bash(rm scripts/_tmp-verify-pr9-brandbid.js)"
+      "Bash(rm scripts/_tmp-verify-pr9-brandbid.js)",
+      "Bash(node scripts/_tmp-verify-pr11.js)",
+      "Bash(rm scripts/_tmp-verify-pr11.js)",
+      "Bash(node scripts/_tmp-cleanup-pr11.js)",
+      "Bash(rm scripts/_tmp-cleanup-pr11.js)",
+      "Bash(node scripts/_tmp-verify-pr11b.js)",
+      "Bash(rm scripts/_tmp-verify-pr11b.js)",
+      "Bash(node scripts/_tmp-verify-pr12.js)",
+      "Bash(rm scripts/_tmp-verify-pr12.js)",
+      "Bash(node scripts/_tmp-verify-pr13.js)",
+      "Bash(rm scripts/_tmp-verify-pr13.js)",
+      "Bash(node scripts/_tmp-verify-maintenance.js)",
+      "Bash(rm scripts/_tmp-verify-maintenance.js)",
+      "Bash(node _tmp-check-help-locales.mjs)",
+      "Bash(rm _tmp-check-help-locales.mjs)",
+      "Bash(node scripts/_tmp-cleanup-qa-affiliate.js)",
+      "Bash(rm scripts/_tmp-cleanup-qa-affiliate.js)"
     ]
   }
 }

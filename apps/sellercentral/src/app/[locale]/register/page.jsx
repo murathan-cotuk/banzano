@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, usePathname } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 import { resolveImageUrl } from "@/lib/image-url";
@@ -219,24 +219,43 @@ function RegisterForm() {
                 </button>
               </div>
             </div>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontSize: 14, color: "#374151" }}>
+            <div
+              role="checkbox"
+              aria-checked={agreementAccepted}
+              tabIndex={0}
+              onClick={() => setAgreementAccepted((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setAgreementAccepted((v) => !v);
+                }
+              }}
+              style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontSize: 14, color: "#374151" }}
+            >
+              {/* CustomCheckbox already renders its own <label> around a hidden native
+                  checkbox — wrapping it in ANOTHER <label> here (as before) is invalid nested
+                  HTML and made browsers require two clicks to toggle it (confirmed live: first
+                  click was silently swallowed, second click toggled). This div takes over the
+                  click-to-toggle responsibility directly instead of relying on label nesting;
+                  CustomCheckbox's onChange is now unreachable via its own label click, so we
+                  no-op it and drive `checked` purely from this wrapper's onClick. */}
               <CustomCheckbox
                 checked={agreementAccepted}
-                onChange={(e) => setAgreementAccepted(e.target.checked)}
+                onChange={() => {}}
                 size={18}
-                style={{ marginTop: 2, flexShrink: 0 }}
+                style={{ marginTop: 2, flexShrink: 0, pointerEvents: "none" }}
               />
               <span>
                 {t.rich("agreeText", {
                   terms: (chunks) => (
-                    <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#1f2937", textDecoration: "underline" }}>{chunks}</a>
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#1f2937", textDecoration: "underline" }}>{chunks}</a>
                   ),
                   privacy: (chunks) => (
-                    <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#1f2937", textDecoration: "underline" }}>{chunks}</a>
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#1f2937", textDecoration: "underline" }}>{chunks}</a>
                   ),
                 })} *
               </span>
-            </label>
+            </div>
             {error && (
               <div style={{ background: "#fee2e2", border: "1px solid #ef4444", borderRadius: 8, padding: "12px 14px", color: "#991b1b", fontSize: 14 }}>{error}</div>
             )}

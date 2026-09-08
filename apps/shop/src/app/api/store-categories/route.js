@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { registerStoreApiCache } from "@/lib/store-api-cache-registry";
 
 const getBackendUrl = () =>
   (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/$/, "");
 
 const categoriesCache = new Map();
-const CACHE_TTL_MS = 300 * 1000; // 5 minutes — category tree rarely changes
+/** Keep short — admin writes also POST /api/revalidate to clear this Map immediately. */
+const CACHE_TTL_MS = 15 * 1000;
+
+registerStoreApiCache("categories", () => categoriesCache.clear());
 
 function emptyCategoriesResponse() {
   return NextResponse.json({ categories: [], tree: [], count: 0 }, { status: 200 });
@@ -33,7 +37,7 @@ export async function GET(request) {
       const cached = categoriesCache.get(cacheKey);
       if (cached && cached.expiresAt > now) {
         return NextResponse.json(cached.data, {
-          headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+          headers: { "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" },
         });
       }
     }
@@ -41,7 +45,7 @@ export async function GET(request) {
     const fetchOpts =
       isDev
         ? { cache: "no-store" }
-        : { next: { revalidate: 300 } };
+        : { next: { revalidate: 15 } };
 
     const res = await fetch(`${base}/store/categories${qs ? `?${qs}` : ""}`, {
       headers: { "Content-Type": "application/json" },
@@ -76,7 +80,7 @@ export async function GET(request) {
     }
     return NextResponse.json(
       data,
-      isDev ? undefined : { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
+      isDev ? undefined : { headers: { "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" } },
     );
   } catch (e) {
     if (isDev) {

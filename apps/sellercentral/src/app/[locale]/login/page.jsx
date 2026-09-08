@@ -4,7 +4,7 @@ import React, { Suspense, useState } from "react";
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter, usePathname } from "@/i18n/navigation";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 import { resolveImageUrl } from "@/lib/image-url";

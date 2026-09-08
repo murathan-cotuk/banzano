@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { registerStoreApiCache } from "@/lib/store-api-cache-registry";
 
 // Cache branding per seller — short TTL so logo/branding changes appear quickly
 const settingsCache = new Map();
 const SETTINGS_TTL = 8 * 1000; // 8 seconds
+
+registerStoreApiCache("seller-settings", () => settingsCache.clear());
 
 const getBackendUrl = () =>
   (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/$/, "");
@@ -35,6 +38,8 @@ export async function GET(req) {
       announcement_bar_items: Array.isArray(data?.announcement_bar_items) ? data.announcement_bar_items : [],
       logo_config: data?.logo_config || null,
       enabled_shop_locales: Array.isArray(data?.enabled_shop_locales) ? data.enabled_shop_locales : null,
+      maintenance_mode_enabled: data?.maintenance_mode_enabled === true,
+      maintenance_mode_image_url: data?.maintenance_mode_image_url || "",
     };
     settingsCache.set(sellerId, { data: result, expiresAt: now + SETTINGS_TTL });
     return NextResponse.json(result, { status: r.ok ? 200 : r.status });

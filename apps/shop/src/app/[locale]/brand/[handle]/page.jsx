@@ -649,7 +649,7 @@ export default function BrandPage() {
 
   useEffect(() => {
     let cancelled = false;
-    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 })
       .then((data) => {
         if (cancelled) return;
         const tree = data.tree || [];

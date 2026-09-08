@@ -740,7 +740,7 @@ export default function SearchTemplate() {
     (async () => {
       try {
         setTreeLoading(true);
-        const j = await cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 }).catch(() => ({ tree: [] }));
+        const j = await cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 }).catch(() => ({ tree: [] }));
         if (!c) return;
         const t = j.tree || j.categories || [];
         setTree(Array.isArray(t) ? t : [t].filter(Boolean));

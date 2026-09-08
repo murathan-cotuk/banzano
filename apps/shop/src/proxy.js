@@ -156,29 +156,30 @@ export default function proxy(request) {
       !triple.rest || triple.rest === "/"
         ? `/${triple.lang}`
         : `/${triple.lang}${triple.rest}`;
-    const u = request.nextUrl.clone();
-    u.pathname = internal;
-    const h = new Headers(request.headers);
-    h.set("x-andertal-market-prefix", mp);
-    h.set("x-andertal-locale", String(triple.lang || "").toLowerCase());
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = internal;
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-andertal-market-prefix", mp);
+    requestHeaders.set("x-andertal-locale", String(triple.lang || "").toLowerCase());
     const curCookie = (request.cookies.get("andertal_currency")?.value || "").trim().toLowerCase();
     if (curCookie && isValidCurrency(curCookie)) {
-      h.set("x-andertal-currency", curCookie);
+      requestHeaders.set("x-andertal-currency", curCookie);
     }
-    const forwarded = new NextRequest(u, {
-      headers: h,
-      method: request.method,
+    // Rewrite (not redirect / not a synthetic NextRequest): public URL stays /{cc}/{lang}/…
+    // while App Router serves /{lang}/…. Soft client navigations need this or the bar updates
+    // without swapping the page until a second click / hard reload.
+    const rewriteRes = NextResponse.rewrite(rewriteUrl, {
+      request: { headers: requestHeaders },
     });
-    const intlRes = intlMiddleware(forwarded);
     try {
-      intlRes.cookies.set("andertal_market_prefix", mp, {
+      rewriteRes.cookies.set("andertal_market_prefix", mp, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
     } catch (_) {}
-    return intlRes;
+    return rewriteRes;
   }
 
   const parts = pathname.split("/").filter(Boolean);

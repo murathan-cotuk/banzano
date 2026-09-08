@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { api, saveToken } from '../../../../lib/api'
+import PasswordField from '../../../../components/PasswordField'
 
 const LOCALES = [
   { code: 'en', label: 'EN' }, { code: 'de', label: 'DE' }, { code: 'tr', label: 'TR' },
@@ -97,7 +98,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label style={labelStyle}>{t('password')}</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" style={inputStyle} />
+              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" placeholder="••••••••" inputStyle={inputStyle} />
             </div>
             {error && (
               <div style={{ background: '#fee2e2', border: '1px solid #ef4444', borderRadius: 8, padding: '12px 14px', color: '#991b1b', fontSize: 14 }}>{error}</div>

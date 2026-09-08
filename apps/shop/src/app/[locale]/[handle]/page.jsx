@@ -14,7 +14,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useShopStyles } from "@/context/ShopStylesContext";
 import { resolveImageUrl, rewriteImageUrlsInHtml } from "@/lib/image-url";
-import { baseHandleFromUrl } from "@/lib/product-url-handle";
+import { baseHandleFromUrl, parseProductUrlHandle } from "@/lib/product-url-handle";
 import { getMedusaClient } from "@/lib/medusa-client";
 import { cachedJsonFetch } from "@/lib/browser-fetch-cache";
 import { storeCategoriesQuery } from "@/lib/store-categories-url";
@@ -846,6 +846,25 @@ function CollectionPage() {
 
         const backendUrl = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000";
 
+        const tryProductHandle = async (h) => {
+          const r = await fetch(`/api/store-products/${encodeURIComponent(h)}`).catch(() => null);
+          if (!r?.ok) return null;
+          return r.json().catch(() => null);
+        };
+
+        const parsedHandle = parseProductUrlHandle(handle);
+        if (parsedHandle.shortCode) {
+          let productData = await tryProductHandle(handle);
+          if (!productData?.product?.id && parsedHandle.base && parsedHandle.base !== handle) {
+            productData = await tryProductHandle(parsedHandle.base);
+          }
+          if (productData?.product?.id) {
+            setIsProduct(true);
+            setLoading(false);
+            return;
+          }
+        }
+
         // Fire all cheap requests in parallel.
         const [categoryBySlugData, colData, productsData] = await Promise.all([
           fetch(`/api/store-categories?slug=${encodeURIComponent(handle)}`).then((r) => r.ok ? r.json() : null).catch(() => null),
@@ -869,7 +888,7 @@ function CollectionPage() {
             if (pageData?.id) { setCmsPage(pageData); setLoading(false); return; }
           }
           // Fallback 3: full tree lookup
-          const catTreeData = await cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 }).catch(() => null);
+          const catTreeData = await cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 }).catch(() => null);
           if (catTreeData) {
             const catTree = catTreeData?.tree || catTreeData?.categories || [];
             if (findCategoryBySlug(catTree, handle)) {
@@ -877,14 +896,8 @@ function CollectionPage() {
             }
           }
           // Fallback 4: product by handle (supports {handle}-{8char-id} URL format)
-          const tryProductHandle = async (h) => {
-            const r = await fetch(`/api/store-products/${encodeURIComponent(h)}`).catch(() => null);
-            if (!r?.ok) return null;
-            return r.json().catch(() => null);
-          };
           let productData = await tryProductHandle(handle);
           if (!productData?.product?.id) {
-            // Strip 8-char short code suffix (e.g. "some-handle-ab12cd34")
             const base = baseHandleFromUrl(handle);
             if (base !== handle) productData = await tryProductHandle(base);
           }

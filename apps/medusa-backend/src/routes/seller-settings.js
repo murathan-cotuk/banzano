@@ -125,6 +125,18 @@ const sellerSettingsGET = async (req, res) => {
          FROM admin_hub_seller_settings WHERE seller_id = $1`,
         [sellerId],
       )
+      // Platform-wide maintenance mode always lives on seller_id='default', same convention as
+      // enabled_shop_locales — read it separately so it's correct even when viewing a specific
+      // seller's own settings row.
+      let maintenance_mode_enabled = false
+      let maintenance_mode_image_url = ''
+      try {
+        const mm = await client.query(
+          `SELECT maintenance_mode_enabled, maintenance_mode_image_url FROM admin_hub_seller_settings WHERE seller_id = 'default'`,
+        )
+        maintenance_mode_enabled = !!mm.rows?.[0]?.maintenance_mode_enabled
+        maintenance_mode_image_url = mm.rows?.[0]?.maintenance_mode_image_url || ''
+      } catch (_) {}
       const row = r.rows && r.rows[0]
       const store_name = row && row.store_name != null ? String(row.store_name) : ''
       let free_shipping_thresholds = (row && row.free_shipping_thresholds) || null
@@ -171,6 +183,8 @@ const sellerSettingsGET = async (req, res) => {
         platform_name, support_email, admin_notification_email, storefront_url, announcement_bar_items, logo_config, barcode_scanner_config,
         enabled_shop_locales,
         locale,
+        maintenance_mode_enabled,
+        maintenance_mode_image_url,
         legal_company_name: row?.legal_company_name || '',
         legal_representative: row?.legal_representative || '',
         legal_street: row?.legal_street || '',
@@ -255,6 +269,21 @@ const sellerSettingsPATCH = async (req, res) => {
       enabled_shop_locales = normalized && normalized.length ? normalized : [...ALL_SHOP_LOCALES]
       enabledLocalesJson = JSON.stringify(enabled_shop_locales)
     }
+    let maintenanceModeEnabled = undefined
+    let maintenanceModeImageUrl = undefined
+    if (Object.prototype.hasOwnProperty.call(body, 'maintenance_mode_enabled') || Object.prototype.hasOwnProperty.call(body, 'maintenance_mode_image_url')) {
+      if (!isSuperuser) {
+        return res.status(403).json({ message: 'Only superuser can change maintenance mode' })
+      }
+      // Platform-wide setting — always stored on seller_id = default, same as enabled_shop_locales.
+      sellerId = 'default'
+      if (Object.prototype.hasOwnProperty.call(body, 'maintenance_mode_enabled')) {
+        maintenanceModeEnabled = body.maintenance_mode_enabled === true
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'maintenance_mode_image_url')) {
+        maintenanceModeImageUrl = body.maintenance_mode_image_url ? String(body.maintenance_mode_image_url).trim() : null
+      }
+    }
     let uiLocale = undefined
     if (Object.prototype.hasOwnProperty.call(body, 'locale')) {
       const raw = String(body.locale || '').trim().toLowerCase()
@@ -275,8 +304,9 @@ const sellerSettingsPATCH = async (req, res) => {
       `INSERT INTO admin_hub_seller_settings (
          seller_id, store_name, free_shipping_thresholds, shop_logo_url, shop_favicon_url, sellercentral_logo_url, sellercentral_favicon_url, shop_logo_height, sellercentral_logo_height, platform_name, support_email, announcement_bar_items, storefront_url, logo_config,
          legal_company_name, legal_representative, legal_street, legal_city, legal_trade_register, legal_register_court, legal_vat_id, legal_tax_id, legal_email, barcode_scanner_config, admin_notification_email, enabled_shop_locales,
+         maintenance_mode_enabled, maintenance_mode_image_url,
          updated_at
-       ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14::jsonb, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, $25, $26::jsonb, now())
+       ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14::jsonb, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, $25, $26::jsonb, $27, $28, now())
        ON CONFLICT (seller_id) DO UPDATE SET
          store_name = COALESCE($2, admin_hub_seller_settings.store_name),
          free_shipping_thresholds = COALESCE($3::jsonb, admin_hub_seller_settings.free_shipping_thresholds),
@@ -303,10 +333,14 @@ const sellerSettingsPATCH = async (req, res) => {
          barcode_scanner_config = COALESCE($24::jsonb, admin_hub_seller_settings.barcode_scanner_config),
          admin_notification_email = COALESCE($25, admin_hub_seller_settings.admin_notification_email),
          enabled_shop_locales = COALESCE($26::jsonb, admin_hub_seller_settings.enabled_shop_locales),
+         maintenance_mode_enabled = COALESCE($27, admin_hub_seller_settings.maintenance_mode_enabled),
+         maintenance_mode_image_url = COALESCE($28, admin_hub_seller_settings.maintenance_mode_image_url),
          updated_at = now()`,
       [sellerId, store_name || null, thresholdsJson, shop_logo_url, shop_favicon_url, sellercentral_logo_url, sellercentral_favicon_url, shop_logo_height, sellercentral_logo_height, platform_name, support_email, announcementJson !== undefined ? announcementJson : null, storefront_url, logoConfigJson !== undefined ? logoConfigJson : null,
        legal_company_name, legal_representative, legal_street, legal_city, legal_trade_register, legal_register_court, legal_vat_id, legal_tax_id, legal_email, barcodeConfigJson !== undefined ? barcodeConfigJson : null, admin_notification_email,
-       enabledLocalesJson !== undefined ? enabledLocalesJson : null]
+       enabledLocalesJson !== undefined ? enabledLocalesJson : null,
+       maintenanceModeEnabled !== undefined ? maintenanceModeEnabled : null,
+       maintenanceModeImageUrl !== undefined ? maintenanceModeImageUrl : null]
     )
     if (uiLocale !== undefined) {
       // Persist Sellercentral UI language on the acting seller's settings row (not platform `default`
@@ -332,6 +366,8 @@ const sellerSettingsPATCH = async (req, res) => {
       sellercentral_logo_height: sellercentral_logo_height != null ? sellercentral_logo_height : 30,
       enabled_shop_locales: enabled_shop_locales !== undefined ? enabled_shop_locales : undefined,
       locale: uiLocale !== undefined ? uiLocale : undefined,
+      maintenance_mode_enabled: maintenanceModeEnabled !== undefined ? maintenanceModeEnabled : undefined,
+      maintenance_mode_image_url: maintenanceModeImageUrl !== undefined ? maintenanceModeImageUrl : undefined,
     })
   } catch (err) {
     console.error('sellerSettingsPATCH:', err)

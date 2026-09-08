@@ -1,5 +1,6 @@
 ﻿import { headers } from "next/headers";
 import SeoJsonLd from "@/components/SeoJsonLd";
+import { parseProductUrlHandle } from "@/lib/product-url-handle";
 import {
   buildPageMetadata,
   buildProductJsonLd,
@@ -45,6 +46,12 @@ const RESERVED = new Set([
 async function resolveHandleEntity(handle, locale) {
   const h = String(handle || "").trim();
   if (!h || RESERVED.has(h.toLowerCase())) return { kind: "none" };
+
+  const parsed = parseProductUrlHandle(h);
+  if (parsed.shortCode) {
+    const product = await fetchStoreProduct(h);
+    if (product?.id) return { kind: "product", product };
+  }
 
   const [category, collection] = await Promise.all([
     fetchStoreCategoryBySlug(h),

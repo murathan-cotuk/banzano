@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRouter, usePathname } from "@/i18n/navigation";
 import { Box, Banner, SkeletonBodyText, SkeletonDisplayText, Card, BlockStack, Button } from "@shopify/polaris";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 import { userError } from "@/lib/api-error-messages";

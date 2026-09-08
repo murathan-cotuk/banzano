@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { registerStoreApiCache } from "@/lib/store-api-cache-registry";
 
 const getBackendUrl = () =>
   (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/$/, "");
 
 const menusCache = new Map(); // locale -> { data, expiresAt }
-const MENUS_TTL = 60 * 1000; // 60 seconds
+const MENUS_TTL = 15 * 1000;
+
+registerStoreApiCache("menus", () => menusCache.clear());
 
 export async function GET(request) {
   const locale = new URL(request.url).searchParams.get("locale") || "";
@@ -14,14 +17,14 @@ export async function GET(request) {
     const cached = menusCache.get(locale);
     if (!skipCache && cached && cached.expiresAt > now) {
       return NextResponse.json(cached.data, {
-        headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=180" },
+        headers: { "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" },
       });
     }
     const base = getBackendUrl();
     const qs = locale ? `?locale=${encodeURIComponent(locale)}` : "";
     const res = await fetch(`${base}/store/menus${qs}`, {
       headers: { "Content-Type": "application/json" },
-      ...(skipCache ? { cache: "no-store" } : { next: { revalidate: 60 } }),
+      ...(skipCache ? { cache: "no-store" } : { next: { revalidate: 15 } }),
     });
     if (!res.ok) {
       if (process.env.NODE_ENV === "development") {
@@ -37,7 +40,7 @@ export async function GET(request) {
     }
     return NextResponse.json(
       data,
-      skipCache ? undefined : { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=180" } },
+      skipCache ? undefined : { headers: { "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" } },
     );
   } catch (e) {
     if (process.env.NODE_ENV === "development") {

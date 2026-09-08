@@ -7,7 +7,7 @@ import {
 } from "@shopify/polaris";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 import { useLocale } from "next-intl";
-import { getMetaobjectsCopy, METAOBJECT_LANGS, slugifyMetaKey, resolveSafeMetaobjectKey } from "@/lib/metaobjects-i18n";
+import { getMetaobjectsCopy, METAOBJECT_LANGS, slugifyMetaKey, resolveSafeMetaobjectKey, localizedMetaobjectLabel, localizedMetaobjectValue } from "@/lib/metaobjects-i18n";
 import { getLandingEditorCopy } from "@/lib/landing-page-editor-i18n";
 import { getUI } from "@/lib/ui-strings";
 import { confirmDelete } from "@/lib/confirm-delete";
@@ -103,6 +103,7 @@ export default function MetaobjectsPage() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
 
+  const [viewLang, setViewLang] = useState(() => String(locale || "de").slice(0, 2));
   const [titleModal, setTitleModal] = useState(null);
   const [titleLang, setTitleLang] = useState("de");
   const [titleDraft, setTitleDraft] = useState(emptyLangDraft());
@@ -177,10 +178,10 @@ export default function MetaobjectsPage() {
   };
 
   const sortedKeys = useMemo(() => Object.keys(definitions).sort((a, b) => {
-    const la = (definitions[a]?.label || a).toLocaleLowerCase();
-    const lb = (definitions[b]?.label || b).toLocaleLowerCase();
+    const la = (localizedMetaobjectLabel(definitions[a], viewLang) || a).toLocaleLowerCase();
+    const lb = (localizedMetaobjectLabel(definitions[b], viewLang) || b).toLocaleLowerCase();
     return la.localeCompare(lb);
-  }), [definitions]);
+  }), [definitions, viewLang]);
 
   const filteredKeys = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -191,6 +192,8 @@ export default function MetaobjectsPage() {
         key,
         def?.label,
         ...METAOBJECT_LANGS.map((L) => def?.label_i18n?.[L.code]?.label),
+        ...(def?.values || []),
+        ...METAOBJECT_LANGS.flatMap((L) => Object.values(def?.values_i18n?.[L.code] || {})),
       ].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(q);
     });
@@ -200,7 +203,7 @@ export default function MetaobjectsPage() {
 
   const openNewTitle = () => {
     setTitleModal({ isNew: true });
-    setTitleLang("de");
+    setTitleLang(viewLang);
     setTitleDraft(emptyLangDraft());
     setTitleKey("");
     setTitleKeyErr("");
@@ -210,7 +213,7 @@ export default function MetaobjectsPage() {
     const def = definitions[key];
     if (!def) return;
     setTitleModal({ isNew: false, key });
-    setTitleLang("de");
+    setTitleLang(viewLang);
     setTitleDraft(titleDraftFromDef(def));
     setTitleKey(key);
     setTitleKeyErr("");
@@ -243,13 +246,13 @@ export default function MetaobjectsPage() {
 
   const openNewValue = (key) => {
     setValueModal({ isNew: true, defKey: key, canonical: "" });
-    setValueLang("de");
+    setValueLang(viewLang);
     setValueDraft(emptyLangDraft());
   };
 
   const openEditValue = (key, canonical) => {
     setValueModal({ isNew: false, defKey: key, canonical });
-    setValueLang("de");
+    setValueLang(viewLang);
     setValueDraft(valueDraftFromDef(definitions[key], canonical));
   };
 
@@ -430,6 +433,16 @@ export default function MetaobjectsPage() {
       <BlockStack gap="400">
         {error && <Banner tone="critical" onDismiss={() => setError("")}>{error}</Banner>}
 
+        <Card>
+          <Select
+            label={c.langPicker}
+            options={langOptions}
+            value={viewLang}
+            onChange={setViewLang}
+            helpText={c.langHelp}
+          />
+        </Card>
+
         {loading ? (
           <Card><Box padding="600"><InlineStack align="center"><Spinner /></InlineStack></Box></Card>
         ) : (
@@ -484,7 +497,7 @@ export default function MetaobjectsPage() {
                       }}
                     >
                       <span style={{ fontSize: 13, fontWeight: active ? 600 : 500, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {def?.label || key}
+                        {localizedMetaobjectLabel(def, viewLang) || key}
                       </span>
                       <Badge>{(def?.values || []).length}</Badge>
                     </button>
@@ -502,7 +515,7 @@ export default function MetaobjectsPage() {
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center" wrap>
                     <BlockStack gap="050">
-                      <Text as="h2" variant="headingSm">{selected.label || selectedKey}</Text>
+                      <Text as="h2" variant="headingSm">{localizedMetaobjectLabel(selected, viewLang) || selectedKey}</Text>
                       <Text as="p" variant="bodySm" tone="subdued">
                         key: <code style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{selectedKey}</code>
                       </Text>
@@ -538,7 +551,7 @@ export default function MetaobjectsPage() {
                             background: "#fff",
                           }}
                         >
-                          <Text as="span" variant="bodySm">{val}</Text>
+                          <Text as="span" variant="bodySm">{localizedMetaobjectValue(selected, val, viewLang)}</Text>
                           {isSuperuser ? (
                             <InlineStack gap="100">
                               <Button size="slim" onClick={() => openEditValue(selectedKey, val)}>{ui.edit}</Button>

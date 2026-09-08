@@ -2,8 +2,11 @@
   "nav": {
     "dashboard": "Dashboard",
     "links": "Links",
+    "referrals": "Empfehlungen",
     "reports": "Berichte",
+    "payouts": "Auszahlungen",
     "resources": "Ressourcen",
+    "settings": "Einstellungen",
     "terms": "AGB",
     "logout": "Abmelden"
   },
@@ -30,7 +33,10 @@
     "requiredFields": "Name, E-Mail und Passwort sind erforderlich.",
     "requiredCountry": "Land ist erforderlich.",
     "passwordTooShort": "Passwort muss mindestens 8 Zeichen haben.",
-    "mustAgree": "Sie müssen den Bedingungen zustimmen, um sich zu registrieren."
+    "mustAgree": "Sie müssen den Bedingungen zustimmen, um sich zu registrieren.",
+    "viewTerms": "Partnerbedingungen ansehen",
+    "viewPrivacy": "Datenschutzerklärung ansehen",
+    "selectCountry": "Land auswählen"
   },
   "dashboard": {
     "title": "Links, Klicks und Provisionen im Überblick",

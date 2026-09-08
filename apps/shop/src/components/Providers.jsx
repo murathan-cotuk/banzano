@@ -20,6 +20,7 @@ const ScrollToTopButton = dynamic(() => import("@/components/ScrollToTopButton")
 const CookieBanner     = dynamic(() => import("@/components/CookieBanner"),     { ssr: false });
 const AffiliateRefCapture = dynamic(() => import("@/components/AffiliateRefCapture"), { ssr: false });
 const AffiliateDisclosureBanner = dynamic(() => import("@/components/AffiliateDisclosureBanner"), { ssr: false });
+const MaintenanceModeOverlay = dynamic(() => import("@/components/MaintenanceModeOverlay"), { ssr: false });
 import MobileShell from "@/components/MobileShell";
 
 function LenisInit() {
@@ -50,6 +51,7 @@ export default function Providers({ children }) {
               <CookieBanner />
               <AffiliateRefCapture />
               <AffiliateDisclosureBanner />
+              <MaintenanceModeOverlay />
             </MobileBottomNavScrollProvider>
           </CartProvider>
         </WishlistProvider>

@@ -201,12 +201,24 @@ const storeSellerSettingsGET = async (req, res) => {
   try {
     const sellerId = (req.query.seller_id || 'default').toString().trim() || 'default'
     const client = getDbClient()
-    if (!client) return res.json({ store_name: '', free_shipping_thresholds: null, shop_logo_url: '', shop_favicon_url: '', sellercentral_logo_url: '', sellercentral_favicon_url: '', shop_logo_height: 34, sellercentral_logo_height: 30, enabled_shop_locales: null })
+    if (!client) return res.json({ store_name: '', free_shipping_thresholds: null, shop_logo_url: '', shop_favicon_url: '', sellercentral_logo_url: '', sellercentral_favicon_url: '', shop_logo_height: 34, sellercentral_logo_height: 30, enabled_shop_locales: null, maintenance_mode_enabled: false, maintenance_mode_image_url: '' })
     await client.connect()
     const r = await client.query(
       'SELECT store_name, free_shipping_thresholds, shop_logo_url, shop_favicon_url, sellercentral_logo_url, sellercentral_favicon_url, shop_logo_height, sellercentral_logo_height, announcement_bar_items, logo_config, enabled_shop_locales FROM admin_hub_seller_settings WHERE seller_id = $1',
       [sellerId],
     )
+    // Platform-wide "coming soon" mode always lives on seller_id='default', same convention as
+    // enabled_shop_locales — resolved separately so it's correct regardless of which seller_id
+    // was requested.
+    let maintenance_mode_enabled = false
+    let maintenance_mode_image_url = ''
+    try {
+      const mm = await client.query(
+        `SELECT maintenance_mode_enabled, maintenance_mode_image_url FROM admin_hub_seller_settings WHERE seller_id = 'default'`,
+      )
+      maintenance_mode_enabled = !!mm.rows?.[0]?.maintenance_mode_enabled
+      maintenance_mode_image_url = mm.rows?.[0]?.maintenance_mode_image_url || ''
+    } catch (_) {}
     // Platform language list always lives on seller_id=default
     let enabled_shop_locales = null
     if (sellerId === 'default') {
@@ -260,10 +272,10 @@ const storeSellerSettingsGET = async (req, res) => {
     if (row && row.logo_config != null) {
       logo_config = typeof row.logo_config === 'string' ? JSON.parse(row.logo_config) : row.logo_config
     }
-    res.json({ store_name, free_shipping_thresholds, shop_logo_url, shop_favicon_url, sellercentral_logo_url, sellercentral_favicon_url, shop_logo_height, sellercentral_logo_height, announcement_bar_items, logo_config, enabled_shop_locales })
+    res.json({ store_name, free_shipping_thresholds, shop_logo_url, shop_favicon_url, sellercentral_logo_url, sellercentral_favicon_url, shop_logo_height, sellercentral_logo_height, announcement_bar_items, logo_config, enabled_shop_locales, maintenance_mode_enabled, maintenance_mode_image_url })
   } catch (err) {
     console.error('[storeSellerSettingsGET] error:', err && err.message)
-    res.json({ store_name: '', free_shipping_thresholds: null, shop_logo_url: '', shop_favicon_url: '', sellercentral_logo_url: '', sellercentral_favicon_url: '', shop_logo_height: 34, sellercentral_logo_height: 30, logo_config: null, enabled_shop_locales: null })
+    res.json({ store_name: '', free_shipping_thresholds: null, shop_logo_url: '', shop_favicon_url: '', sellercentral_logo_url: '', sellercentral_favicon_url: '', shop_logo_height: 34, sellercentral_logo_height: 30, logo_config: null, enabled_shop_locales: null, maintenance_mode_enabled: false, maintenance_mode_image_url: '' })
   }
 }
 

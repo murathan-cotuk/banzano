@@ -509,6 +509,44 @@ const adminHubCategoriesWarmTranslationsPOST = async (req, res) => {
 // merging inheritance (compliance-profiles.json) + marketplace overlay
 // (marketplace-overlays.json). Does NOT change any validation behavior — nothing
 // calls this to block a save yet. Safe to ship ahead of the actual gate.
+const CUSTOM_FIELD_TYPES = new Set(['text', 'number', 'select', 'file'])
+
+function sanitizeCustomField(raw, existingKeys) {
+  const label = String(raw?.label || '').trim()
+  if (!label) return null
+  const type = CUSTOM_FIELD_TYPES.has(raw?.type) ? raw.type : 'text'
+  let key = String(raw?.key || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
+  if (!key) key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  if (!key) key = 'field'
+  key = `custom_${key}`.slice(0, 80)
+  let uniqueKey = key
+  let n = 2
+  while (existingKeys.has(uniqueKey)) { uniqueKey = `${key}_${n}`; n += 1 }
+  existingKeys.add(uniqueKey)
+  const help_text = String(raw?.help_text || '').trim()
+  const out = { key: uniqueKey, label, type }
+  if (help_text) out.help_text = help_text
+  if (type === 'select') {
+    const options = Array.isArray(raw?.options) ? raw.options.map((o) => String(o || '').trim()).filter(Boolean) : []
+    out.options = options
+  }
+  return out
+}
+
+/** Build a category's own custom_compliance_fields into the field_definitions shape ComplianceFieldsSection expects. */
+function customFieldsToDefs(fields) {
+  const out = {}
+  for (const f of fields || []) {
+    out[f.key] = {
+      type: f.type,
+      label_i18n: { de: f.label },
+      help_text_i18n: f.help_text ? { de: f.help_text } : {},
+      ...(f.type === 'select' ? { options: f.options || [] } : {}),
+    }
+  }
+  return out
+}
+
 const adminHubCategoryComplianceSchemaGET = async (req, res) => {
   const id = (req.params.id || '').trim()
   if (!id) return res.status(400).json({ message: 'category id required' })
@@ -527,6 +565,16 @@ const adminHubCategoryComplianceSchemaGET = async (req, res) => {
     await client.end()
 
     const resolved = resolveComplianceProfile(profileId || DEFAULT_PROFILE_ID, marketplace)
+
+    // Manually-added, category-own required fields (docs/HUKUKI.md follow-up — superuser can add
+    // ad-hoc mandatory fields per category beyond the static profile catalog). Not inherited by
+    // children on purpose: each category gets its own explicit set via ComplianceProfilesPage.
+    const ownCustomFields = Array.isArray(ownMeta.custom_compliance_fields) ? ownMeta.custom_compliance_fields : []
+    const customKeys = ownCustomFields.map((f) => f.key).filter(Boolean)
+    const mergedRequired = [...resolved.required_fields, ...customKeys.filter((k) => !resolved.required_fields.includes(k))]
+    const mergedBlocked = [...resolved.blocked_publish_without, ...customKeys.filter((k) => !resolved.blocked_publish_without.includes(k))]
+    const mergedDefs = { ...resolved.field_definitions, ...customFieldsToDefs(ownCustomFields) }
+
     res.json({
       category_id: id,
       category_name: own.name || null,
@@ -534,11 +582,43 @@ const adminHubCategoryComplianceSchemaGET = async (req, res) => {
       // uses this to show "explicit" vs "inherited from an ancestor" in the override editor.
       own_profile_id: ownMeta.compliance_profile_id || null,
       resolved_from: profileId ? 'category_or_ancestor' : 'default_fallback',
+      own_custom_fields: ownCustomFields,
       ...resolved,
+      required_fields: mergedRequired,
+      blocked_publish_without: mergedBlocked,
+      field_definitions: mergedDefs,
     })
   } catch (e) {
     try { await client.end() } catch (_) {}
     console.error('Category compliance-schema GET:', e)
+    res.status(500).json({ message: (e && e.message) || 'Internal server error' })
+  }
+}
+
+// PATCH /admin-hub/v1/categories/:id/compliance-custom-fields — superuser only. Full-replace of
+// this category's OWN manually-added required fields (metadata.custom_compliance_fields). Not
+// inherited by children — see adminHubCategoryComplianceSchemaGET. Body: { fields: [{ key?, label, type, options?, help_text? }] }.
+const adminHubCategoryComplianceCustomFieldsPATCH = async (req, res) => {
+  const id = (req.params.id || '').trim()
+  if (!id) return res.status(400).json({ message: 'category id required' })
+  const rawFields = Array.isArray(req.body?.fields) ? req.body.fields : []
+  const existingKeys = new Set()
+  const fields = rawFields.map((f) => sanitizeCustomField(f, existingKeys)).filter(Boolean)
+  const client = getCategoriesPgClient()
+  if (!client) return categoriesPgUnavailable(res)
+  try {
+    await client.connect()
+    const exists = await client.query('SELECT id FROM admin_hub_categories WHERE id = $1', [id])
+    if (!exists.rows[0]) { await client.end(); return res.status(404).json({ message: 'Category not found' }) }
+    await client.query(
+      `UPDATE admin_hub_categories SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('custom_compliance_fields', $1::jsonb) WHERE id = $2`,
+      [JSON.stringify(fields), id],
+    )
+    await client.end()
+    res.json({ success: true, category_id: id, fields })
+  } catch (e) {
+    try { await client.end() } catch (_) {}
+    console.error('Category compliance-custom-fields PATCH:', e)
     res.status(500).json({ message: (e && e.message) || 'Internal server error' })
   }
 }
@@ -688,6 +768,7 @@ module.exports = function createCategoriesRouter() {
   router.post('/admin-hub/v1/categories/warm-translations', requireSuperuser, adminHubCategoriesWarmTranslationsPOST)
   router.get('/admin-hub/v1/compliance-profiles', requireSuperuser, adminHubComplianceProfilesGET)
   router.patch('/admin-hub/v1/categories/:id/compliance-profile', requireSuperuser, adminHubCategoryComplianceProfilePATCH)
+  router.patch('/admin-hub/v1/categories/:id/compliance-custom-fields', requireSuperuser, adminHubCategoryComplianceCustomFieldsPATCH)
 
   return router
 }

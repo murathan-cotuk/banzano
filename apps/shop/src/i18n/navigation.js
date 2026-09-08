@@ -40,9 +40,22 @@ function marketTripleFromPathname(pathname, ctxPrefix) {
   return pathParsed || ctxParsed;
 }
 
-export function Link({ href, locale, ...props }) {
+function isModifiedClick(e) {
+  return !!(
+    e &&
+    (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1)
+  );
+}
+
+/**
+ * Public href is always /{country}/{lang}/…. Soft-nav targets that same URL; proxy rewrites
+ * to App Router /{lang}/…. Click handler still force-pushes via the router so Polaris-like
+ * nested anchors / interrupted default navigations cannot leave URL updated with a stale page.
+ */
+export function Link({ href, locale, onClick, ...props }) {
   const pathname = useNextPathname() || "/";
   const ctxPrefix = useMarketPrefix();
+  const nextRouter = useNextRouter();
   const base = marketTripleFromPathname(pathname, ctxPrefix);
   let country = base?.country ?? "de";
   let lang = base?.lang ?? "de";
@@ -52,15 +65,24 @@ export function Link({ href, locale, ...props }) {
   const prefix = marketPrefix(country, lang);
 
   if (typeof href === "string" && (href.startsWith("http://") || href.startsWith("https://"))) {
-    return <NextLink href={href} {...props} />;
+    return <NextLink href={href} onClick={onClick} {...props} />;
   }
 
-  const pathOnly = typeof href === "object" && href?.pathname != null
-    ? normalizeAppPath(href.pathname)
-    : normalizeAppPath(typeof href === "string" ? href : "/");
+  const pathOnly =
+    typeof href === "object" && href?.pathname != null
+      ? normalizeAppPath(href.pathname)
+      : normalizeAppPath(typeof href === "string" ? href : "/");
 
-  const full = pathOnly === "/" ? prefix : `${prefix}${pathOnly}`;
-  return <NextLink href={full} {...props} />;
+  const marketHref = pathOnly === "/" ? prefix : `${prefix}${pathOnly}`;
+
+  const handleClick = (e) => {
+    onClick?.(e);
+    if (e.defaultPrevented || isModifiedClick(e) || props.target === "_blank") return;
+    e.preventDefault();
+    nextRouter.push(marketHref);
+  };
+
+  return <NextLink href={marketHref} onClick={handleClick} {...props} />;
 }
 
 export function useRouter() {

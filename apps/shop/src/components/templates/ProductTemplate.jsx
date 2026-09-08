@@ -8,7 +8,7 @@ import styled from "styled-components";
 import { Button } from "@andertal/ui";
 import { getMedusaClient } from "@/lib/medusa-client";
 import { CartContext } from "@/context/CartContext";
-import { formatPriceCents, getLocalizedProduct, getLocalizedCategory } from "@/lib/format";
+import { formatPriceCents, getLocalizedProduct, getLocalizedCategory, isPlaceholderProductTitle } from "@/lib/format";
 import { resolveImageUrl } from "@/lib/image-url";
 import { colorSwatchFallback } from "@/lib/color-swatch";
 import { storefrontProductHandle } from "@/lib/product-url-handle";
@@ -1113,7 +1113,7 @@ export default function ProductTemplate() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/store-products/${encodeURIComponent(slug)}`);
+        const res = await fetch(`/api/store-products/${encodeURIComponent(slug)}`, { cache: "no-store" });
         const data = await res.json();
         if (res.status === 404 || !data?.product) {
           setMultiOffer(null);
@@ -1133,6 +1133,15 @@ export default function ProductTemplate() {
     };
     fetchProduct();
   }, [slug]);
+
+  useEffect(() => {
+    if (!product) return;
+    const canonical = storefrontProductHandle(product, locale);
+    const current = String(slug || "").trim();
+    if (!canonical || !current) return;
+    if (canonical.toLowerCase() === current.toLowerCase()) return;
+    router.replace(`/${canonical}`);
+  }, [product, locale, slug, router]);
 
   useEffect(() => {
     if (!product) return;
@@ -1192,7 +1201,7 @@ export default function ProductTemplate() {
     }
 
     let cancelled = false;
-    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 })
       .then((data) => {
         if (cancelled) return;
         const tree = data?.tree || data?.categories || [];
@@ -1280,12 +1289,12 @@ export default function ProductTemplate() {
 
   const { title: displayTitle, description: displayDescription } = getLocalizedProduct(product, locale);
   const localeMedia = localizedProductMediaList(product, locale);
-  const rawImages = product.images?.length
-    ? product.images
-    : product.thumbnail
-      ? [{ url: product.thumbnail, alt: product.title }]
-      : localeMedia.length
-        ? localeMedia.map((url) => ({ url: typeof url === "string" ? url : url?.url, alt: product.title }))
+  const rawImages = localeMedia.length
+    ? localeMedia.map((url) => ({ url: typeof url === "string" ? url : url?.url, alt: displayTitle }))
+    : product.images?.length
+      ? product.images
+      : product.thumbnail
+        ? [{ url: product.thumbnail, alt: displayTitle }]
         : [];
   const images = rawImages.map((img) => ({ ...img, url: resolveImageUrl(img?.url || img) || img?.url || img }));
   const meta = product.metadata || {};
@@ -1322,7 +1331,9 @@ export default function ProductTemplate() {
     : images;
   // Variant-specific locale content overrides (title, description, bullets)
   const variantContent = variant ? variantLocaleContent(variant, locale) : {};
-  const effectiveTitle = variantContent.title || displayTitle;
+  const effectiveTitle = (variantContent.title && !isPlaceholderProductTitle(variantContent.title))
+    ? variantContent.title
+    : displayTitle;
   const effectiveDescription = variantContent.description || displayDescription;
   // Local neutral "no image" placeholder — was previously an external via.placeholder.com
   // URL, an unreliable third-party service prone to outages/broken-image icons.
@@ -1689,7 +1700,7 @@ export default function ProductTemplate() {
         <GalleryCol>
           <div style={{ position: "relative", width: "100%" }}>
             <MainImageWrap onClick={() => displayImages.length > 0 && setLightboxOpen(true)}>
-              <MainImage src={mainImage} alt={displayTitle} />
+              <MainImage src={mainImage} alt={displayTitle} referrerPolicy="no-referrer" />
               <ProductImageBadges isComingSoon={isComingSoon} customBadges={meta.custom_badges} locale={locale} />
             </MainImageWrap>
             {product?.id && (
@@ -1721,6 +1732,7 @@ export default function ProductTemplate() {
                   key={index}
                   src={img.url || ""}
                   alt={img.alt || displayTitle}
+                  referrerPolicy="no-referrer"
                   $active={index === selectedImage}
                   onClick={() => setSelectedImage(index)}
                 />

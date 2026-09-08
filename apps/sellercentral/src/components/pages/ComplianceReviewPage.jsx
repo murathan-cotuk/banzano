@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
 import { Page, Card, BlockStack, InlineStack, Text, Badge, Banner, Spinner, Box, TextField, Select } from "@shopify/polaris";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 
 // Surfaces docs/HUKUKI.md's non-blocking "needs_compliance_review" advisory (Faz 2) — until now

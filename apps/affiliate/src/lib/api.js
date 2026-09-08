@@ -34,4 +34,11 @@ export const api = {
   listLinks: () => apiFetch('/links'),
   createLink: (data) => apiFetch('/links', { method: 'POST', body: JSON.stringify(data) }),
   listCommissions: (status) => apiFetch(`/commissions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+
+  listReferrals: () => apiFetch('/referrals'),
+  listPayouts: () => apiFetch('/payouts'),
+
+  stripeConnectOnboard: () => apiFetch('/stripe-connect/onboard', { method: 'POST' }),
+  stripeConnectStatus: () => apiFetch('/stripe-connect/status'),
+  stripeConnectDashboardLink: () => apiFetch('/stripe-connect/dashboard-link'),
 }

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
 import { Page, Card, BlockStack, InlineStack, Text, Badge, Banner, Spinner, Box } from "@shopify/polaris";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 
 // Surfaces a real financial gap found while testing the shop as a customer (2026-09):

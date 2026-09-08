@@ -3,6 +3,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { api, saveToken } from '../../../../lib/api'
+import PasswordField from '../../../../components/PasswordField'
+import { ALLOWED_COUNTRIES } from '../../../../lib/countries'
+
+const SHOP_URL = (process.env.NEXT_PUBLIC_SHOP_URL || 'https://andertal.com').replace(/\/$/, '')
 
 const LOCALES = [
   { code: 'en', label: 'EN' }, { code: 'de', label: 'DE' }, { code: 'tr', label: 'TR' },
@@ -121,7 +125,7 @@ export default function SignupPage() {
             </div>
             <div>
               <label style={labelStyle}>{t('password')} *</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" placeholder={t('passwordHint')} style={inputStyle} />
+              <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" placeholder={t('passwordHint')} inputStyle={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>{t('companyName')}</label>
@@ -130,7 +134,12 @@ export default function SignupPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={labelStyle}>{t('country')} *</label>
-                <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} required placeholder="DE" maxLength={2} style={inputStyle} />
+                <select value={country} onChange={(e) => setCountry(e.target.value)} required style={{ ...inputStyle, background: '#fff' }}>
+                  <option value="">{t('selectCountry')}</option>
+                  {ALLOWED_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label style={labelStyle}>{t('vatNumber')}</label>
@@ -142,6 +151,10 @@ export default function SignupPage() {
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3, flexShrink: 0 }} />
               <span style={{ lineHeight: 1.5 }}>{t('agreeTerms')} *</span>
             </label>
+            <div style={{ display: 'flex', gap: 16, marginTop: -8, marginLeft: 26, flexWrap: 'wrap' }}>
+              <a href={`/${locale}/terms`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#111827', textDecoration: 'underline' }}>{t('viewTerms')}</a>
+              <a href={`${SHOP_URL}/${locale}/datenschutz`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#111827', textDecoration: 'underline' }}>{t('viewPrivacy')}</a>
+            </div>
             {error && (
               <div style={{ background: '#fee2e2', border: '1px solid #ef4444', borderRadius: 8, padding: '12px 14px', color: '#991b1b', fontSize: 14 }}>{error}</div>
             )}

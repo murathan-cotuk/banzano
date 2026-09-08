@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Order"
+                  targetNamespace="https://andertal.com/bpmn">
+  <bpmn:collaboration id="Collab_Order">
+    <bpmn:participant id="Pool_Order" name="Sipariş ve Ödeme Süreci" processRef="Process_Order" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Order" name="Sipariş ve Ödeme Süreci" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Order">
+      <bpmn:lane id="Lane_Order_0" name="Müşteri">
+        <bpmn:flowNodeRef>start_customer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_payment_info</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_success</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Order_1" name="Shop (Frontend)">
+        <bpmn:flowNodeRef>task_payment_fail</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_fail</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Order_2" name="Backend / Sistem">
+        <bpmn:flowNodeRef>task_create_pi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_payment_ok</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_create_order</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_calc_commission</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_notify_seller</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_wait14</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_payout</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Order_3" name="Satıcı">
+        <bpmn:flowNodeRef>task_ship</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_tracking</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start_customer" name="Sepeti Onayla">
+      <bpmn:outgoing>Flow_Order_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="task_payment_info" name="Ödeme Bilgisi Gir">
+      <bpmn:incoming>Flow_Order_0</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_create_pi" name="Stripe Payment Intent Oluştur">
+      <bpmn:incoming>Flow_Order_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_payment_ok" name="Ödeme Başarılı mı?">
+      <bpmn:incoming>Flow_Order_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Order_5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_payment_fail" name="Hata Göster">
+      <bpmn:incoming>Flow_Order_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_fail" name="Sipariş İptal">
+      <bpmn:incoming>Flow_Order_4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_create_order" name="Sipariş Oluştur
+(Bonus/Kupon Uygula)">
+      <bpmn:incoming>Flow_Order_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_calc_commission" name="Platform Komisyonu Hesapla">
+      <bpmn:incoming>Flow_Order_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_notify_seller" name="Satıcıya Bildirim Gönder">
+      <bpmn:incoming>Flow_Order_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_ship" name="Ürünü Kargola">
+      <bpmn:incoming>Flow_Order_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_tracking" name="Kargo Takip No Gir">
+      <bpmn:incoming>Flow_Order_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_wait14" name="14 Gün Bekleme Süresi">
+      <bpmn:incoming>Flow_Order_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_payout" name="Satıcıya Öde
+(IBAN / Stripe Connect)">
+      <bpmn:incoming>Flow_Order_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_Order_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_success" name="Sipariş Tamamlandı">
+      <bpmn:incoming>Flow_Order_12</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Order_0" sourceRef="start_customer" targetRef="task_payment_info" />
+    <bpmn:sequenceFlow id="Flow_Order_1" sourceRef="task_payment_info" targetRef="task_create_pi" />
+    <bpmn:sequenceFlow id="Flow_Order_2" sourceRef="task_create_pi" targetRef="gw_payment_ok" />
+    <bpmn:sequenceFlow id="Flow_Order_3" sourceRef="gw_payment_ok" targetRef="task_payment_fail" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_Order_4" sourceRef="task_payment_fail" targetRef="end_fail" />
+    <bpmn:sequenceFlow id="Flow_Order_5" sourceRef="gw_payment_ok" targetRef="task_create_order" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_Order_6" sourceRef="task_create_order" targetRef="task_calc_commission" />
+    <bpmn:sequenceFlow id="Flow_Order_7" sourceRef="task_calc_commission" targetRef="task_notify_seller" />
+    <bpmn:sequenceFlow id="Flow_Order_8" sourceRef="task_notify_seller" targetRef="task_ship" />
+    <bpmn:sequenceFlow id="Flow_Order_9" sourceRef="task_ship" targetRef="task_tracking" />
+    <bpmn:sequenceFlow id="Flow_Order_10" sourceRef="task_tracking" targetRef="task_wait14" />
+    <bpmn:sequenceFlow id="Flow_Order_11" sourceRef="task_wait14" targetRef="task_payout" />
+    <bpmn:sequenceFlow id="Flow_Order_12" sourceRef="task_payout" targetRef="end_success" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_Order">
+    <bpmndi:BPMNPlane id="Plane_Order" bpmnElement="Collab_Order">
+      <bpmndi:BPMNShape id="Pool_Order_di" bpmnElement="Pool_Order" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="2620" height="720" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Order_0_di" bpmnElement="Lane_Order_0" isHorizontal="true">
+        <dc:Bounds x="70" y="90" width="2590" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Order_1_di" bpmnElement="Lane_Order_1" isHorizontal="true">
+        <dc:Bounds x="70" y="240" width="2590" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Order_2_di" bpmnElement="Lane_Order_2" isHorizontal="true">
+        <dc:Bounds x="70" y="390" width="2590" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Order_3_di" bpmnElement="Lane_Order_3" isHorizontal="true">
+        <dc:Bounds x="70" y="540" width="2590" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_customer_di" bpmnElement="start_customer">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_payment_info_di" bpmnElement="task_payment_info">
+        <dc:Bounds x="330" y="120" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_create_pi_di" bpmnElement="task_create_pi">
+        <dc:Bounds x="500" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_payment_ok_di" bpmnElement="gw_payment_ok">
+        <dc:Bounds x="670" y="420" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_payment_fail_di" bpmnElement="task_payment_fail">
+        <dc:Bounds x="840" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_fail_di" bpmnElement="end_fail">
+        <dc:Bounds x="1010" y="270" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_create_order_di" bpmnElement="task_create_order">
+        <dc:Bounds x="1180" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_calc_commission_di" bpmnElement="task_calc_commission">
+        <dc:Bounds x="1350" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_notify_seller_di" bpmnElement="task_notify_seller">
+        <dc:Bounds x="1520" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_ship_di" bpmnElement="task_ship">
+        <dc:Bounds x="1690" y="570" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_tracking_di" bpmnElement="task_tracking">
+        <dc:Bounds x="1860" y="570" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_wait14_di" bpmnElement="task_wait14">
+        <dc:Bounds x="2030" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_payout_di" bpmnElement="task_payout">
+        <dc:Bounds x="2200" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_success_di" bpmnElement="end_success">
+        <dc:Bounds x="2370" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Order_0_di" bpmnElement="Flow_Order_0">
+        <di:waypoint x="196" y="138" />
+        <di:waypoint x="330" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_1_di" bpmnElement="Flow_Order_1">
+        <di:waypoint x="460" y="155" />
+        <di:waypoint x="500" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_2_di" bpmnElement="Flow_Order_2">
+        <di:waypoint x="630" y="455" />
+        <di:waypoint x="670" y="443" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_3_di" bpmnElement="Flow_Order_3">
+        <di:waypoint x="716" y="443" />
+        <di:waypoint x="840" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_4_di" bpmnElement="Flow_Order_4">
+        <di:waypoint x="970" y="305" />
+        <di:waypoint x="1010" y="288" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_5_di" bpmnElement="Flow_Order_5">
+        <di:waypoint x="716" y="443" />
+        <di:waypoint x="1180" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_6_di" bpmnElement="Flow_Order_6">
+        <di:waypoint x="1310" y="455" />
+        <di:waypoint x="1350" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_7_di" bpmnElement="Flow_Order_7">
+        <di:waypoint x="1480" y="455" />
+        <di:waypoint x="1520" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_8_di" bpmnElement="Flow_Order_8">
+        <di:waypoint x="1650" y="455" />
+        <di:waypoint x="1690" y="605" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_9_di" bpmnElement="Flow_Order_9">
+        <di:waypoint x="1820" y="605" />
+        <di:waypoint x="1860" y="605" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_10_di" bpmnElement="Flow_Order_10">
+        <di:waypoint x="1990" y="605" />
+        <di:waypoint x="2030" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_11_di" bpmnElement="Flow_Order_11">
+        <di:waypoint x="2160" y="455" />
+        <di:waypoint x="2200" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Order_12_di" bpmnElement="Flow_Order_12">
+        <di:waypoint x="2330" y="455" />
+        <di:waypoint x="2370" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

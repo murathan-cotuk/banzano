@@ -37,7 +37,7 @@ import {
   EditIcon,
   QuestionCircleIcon,
 } from "@shopify/polaris-icons";
-import dynamic from "next/dynamic";
+import GroupedDropdownSearch from "./GroupedDropdownSearch";
 import { applyDocumentFavicon } from "@/lib/apply-document-favicon";
 import { polarisI18nFor } from "@/lib/polaris-locale";
 import { getApprovalBannerCopy } from "@/lib/approval-banner-i18n";
@@ -114,11 +114,6 @@ function buildSellercentralLogoSlotsFromSettings(d) {
   };
   return { desktop, tablet, mobile };
 }
-
-const GroupedDropdownSearch = dynamic(
-  () => import("./GroupedDropdownSearch").then((m) => m.default),
-  { ssr: false, loading: () => <div style={{ width: "100%", maxWidth: 400, height: 36 }} /> }
-);
 
 /**
  * Polaris Navigation.Section passes `key: label` to Item — label must stay a string, not a React node.
@@ -411,19 +406,33 @@ const isModifiedOrNewTabClick = (e) => {
 // navigation into the first child page.
 const isToggleOnlyNavUrl = (url, onClick) => PARENT_NAV_URLS.has(url || "") && typeof onClick === "function";
 
+/**
+ * Soft-nav through next-intl router.push (not raw next/link alone).
+ * Raw Link + middleware locale redirect often updates the address bar while leaving the
+ * previous RSC page mounted until a second click or hard reload.
+ */
 const NextLink = forwardRef(function NextLink({ url, children, external, onClick, ...rest }, ref) {
+  const router = useRouter();
   const toggleOnly = isToggleOnlyNavUrl(url, onClick);
-  const href = toggleOnly ? "#" : (NAV_VIRTUAL_URL_FALLBACK[url] || (url || ""));
+  const target = NAV_VIRTUAL_URL_FALLBACK[url] || (url || "");
+  const href = toggleOnly ? "#" : target;
   const handleClick = (e) => {
-    // Keep browser-native new-tab behavior (Ctrl/Cmd click, middle click, etc.)
-    if (isModifiedOrNewTabClick(e)) {
+    if (isModifiedOrNewTabClick(e) || external) {
       onClick?.(e);
       return;
     }
     if (toggleOnly) {
       e.preventDefault();
+      onClick?.(e);
+      return;
     }
+    if (!target || target.startsWith("#")) {
+      onClick?.(e);
+      return;
+    }
+    e.preventDefault();
     onClick?.(e);
+    router.push(target);
   };
   return (
     <Link href={href} ref={ref} onClick={handleClick} {...rest}>
@@ -434,11 +443,12 @@ const NextLink = forwardRef(function NextLink({ url, children, external, onClick
 
 const UnsavedAwareLink = forwardRef(function UnsavedAwareLink({ url, children, external, onClick, ...rest }, ref) {
   const ctx = useUnsavedChanges();
+  const router = useRouter();
   const toggleOnly = isToggleOnlyNavUrl(url, onClick);
-  const href = toggleOnly ? "#" : (NAV_VIRTUAL_URL_FALLBACK[url] || (url || "#"));
+  const target = NAV_VIRTUAL_URL_FALLBACK[url] || (url || "");
+  const href = toggleOnly ? "#" : (target || "#");
   const handleClick = (e) => {
-    // Do not block browser-native new-tab actions.
-    if (isModifiedOrNewTabClick(e)) {
+    if (isModifiedOrNewTabClick(e) || external) {
       onClick?.(e);
       return;
     }
@@ -447,12 +457,18 @@ const UnsavedAwareLink = forwardRef(function UnsavedAwareLink({ url, children, e
       onClick?.(e);
       return;
     }
-    if (ctx?.isDirty && (url || "").trim() && !(url || "").startsWith("#")) {
+    if (ctx?.isDirty && target && !target.startsWith("#")) {
       e.preventDefault();
-      ctx.startNavigate(url || "/");
+      ctx.startNavigate(target);
       return;
     }
+    if (!target || target.startsWith("#")) {
+      onClick?.(e);
+      return;
+    }
+    e.preventDefault();
     onClick?.(e);
+    router.push(target);
   };
   return (
     <Link ref={ref} href={href} onClick={handleClick} {...rest}>

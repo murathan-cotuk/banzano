@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { Button, InlineStack, BlockStack } from "@shopify/polaris";
 import { useLocale } from "next-intl";
 import { fmtMoney } from "@/lib/locale-text";
@@ -360,7 +361,7 @@ export default function VersandPage() {
         <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
         <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>{s.noOrdersToPack}</h2>
         <p style={{ color: "#6b7280", fontSize: 14 }}>{s.noOrdersHint}</p>
-        <button onClick={() => router.push(`/${locale}/orders`)} style={{ marginTop: 16, padding: "9px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+        <button onClick={() => router.push("/orders")} style={{ marginTop: 16, padding: "9px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
           {s.backToOrders}
         </button>
       </div>
@@ -493,7 +494,7 @@ export default function VersandPage() {
     <div style={{ padding: 24, maxWidth: 800, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <button onClick={() => router.push(`/${locale}/orders`)} style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 14px", fontSize: 13, cursor: "pointer" }}>{s.back}</button>
+          <button onClick={() => router.push("/orders")} style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 7, padding: "6px 14px", fontSize: 13, cursor: "pointer" }}>{s.back}</button>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{s.packingCenter}</h1>
         </div>
         <div style={{ fontSize: 13, color: "#6b7280" }}>

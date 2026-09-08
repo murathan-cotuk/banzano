@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { usePathname, Link } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { userError } from "@/lib/api-error-messages";
@@ -18,6 +18,7 @@ import {
   Select,
 } from "@shopify/polaris";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
+import MediaPickerModal from "@/components/MediaPickerModal";
 import { routing } from "@/i18n/routing";
 import { getUI } from "@/lib/ui-strings";
 
@@ -124,6 +125,11 @@ export default function GeneralSettingsPage() {
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [enabledShopLocales, setEnabledShopLocales] = useState(() => ALL_SHOP_LOCALES.map((l) => l.code));
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [maintenanceImageUrl, setMaintenanceImageUrl] = useState("");
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState("");
+  const [maintenancePickerOpen, setMaintenancePickerOpen] = useState(false);
   const [localesSaving, setLocalesSaving] = useState(false);
   const [localesSaved, setLocalesSaved] = useState(false);
   const [localesError, setLocalesError] = useState("");
@@ -212,6 +218,8 @@ export default function GeneralSettingsPage() {
             : ALL_SHOP_LOCALES.map((l) => l.code);
           if (!cancelled) {
             setEnabledShopLocales(ALL_SHOP_LOCALES.map((l) => l.code).filter((c) => enabled.includes(c)));
+            setMaintenanceEnabled(platData.maintenance_mode_enabled === true);
+            setMaintenanceImageUrl(platData.maintenance_mode_image_url || "");
           }
         }
 
@@ -375,6 +383,57 @@ export default function GeneralSettingsPage() {
     }
   };
 
+  const bustShopSettingsCache = () => {
+    try {
+      const shopOrigin = (typeof window !== "undefined" && window.location?.origin?.includes("localhost"))
+        ? (process.env.NEXT_PUBLIC_SHOP_URL || "http://localhost:3000")
+        : (process.env.NEXT_PUBLIC_SHOP_URL || "");
+      if (shopOrigin) {
+        fetch(`${shopOrigin.replace(/\/$/, "")}/api/store-seller-settings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seller_id: "default" }),
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
+  const handleMaintenanceToggle = async (nextOn) => {
+    if (!isSuperuser) return;
+    const prev = maintenanceEnabled;
+    setMaintenanceEnabled(nextOn);
+    setMaintenanceError("");
+    setMaintenanceSaving(true);
+    try {
+      await client.updateSellerSettings({ seller_id: "default", maintenance_mode_enabled: nextOn });
+      bustShopSettingsCache();
+    } catch (err) {
+      setMaintenanceEnabled(prev);
+      setMaintenanceError(err?.message || ui.saveError);
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  };
+
+  const handleMaintenanceImageSelect = async (urls) => {
+    const url = urls?.[0];
+    if (!url) return;
+    setMaintenancePickerOpen(false);
+    const prev = maintenanceImageUrl;
+    setMaintenanceImageUrl(url);
+    setMaintenanceError("");
+    setMaintenanceSaving(true);
+    try {
+      await client.updateSellerSettings({ seller_id: "default", maintenance_mode_image_url: url });
+      bustShopSettingsCache();
+    } catch (err) {
+      setMaintenanceImageUrl(prev);
+      setMaintenanceError(err?.message || ui.saveError);
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  };
+
   const handleDocumentUpload = async (files) => {
     if (!files?.length) return;
     setUploadingDocs(true);
@@ -425,7 +484,7 @@ export default function GeneralSettingsPage() {
           : pathWithoutLocale.startsWith("/")
             ? pathWithoutLocale
             : `/${pathWithoutLocale}`;
-      router.push(`/${next}${base}`);
+      router.push(base, { locale: next });
     } catch (err) {
       setUiLocale(locale || "de");
       setSaveError(userError(err, locale, "Could not save language preference."));
@@ -730,6 +789,60 @@ export default function GeneralSettingsPage() {
                 <p>{ui.savedSuccess}</p>
               </Banner>
             )}
+          </BlockStack>
+        </Card>
+      )}
+
+      {isSuperuser && (
+        <Card>
+          <BlockStack gap="400">
+            <SectionLabel
+              title={locale === "tr" ? "Bakım modu (Coming soon)" : locale === "en" ? "Maintenance mode (Coming soon)" : "Wartungsmodus (Coming soon)"}
+              subtitle={locale === "tr"
+                ? "Açıldığında shop'taki tüm sayfalar seçilen görselle tam ekran kaplanır."
+                : locale === "en"
+                  ? "When on, every page on the shop is covered full-screen by the selected image."
+                  : "Wenn aktiviert, wird jede Shop-Seite vollflächig vom ausgewählten Bild überdeckt."}
+            />
+            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+              <Text as="span" variant="bodyMd">
+                {locale === "tr" ? "Siteyi duraklat" : locale === "en" ? "Pause the site" : "Website pausieren"}
+              </Text>
+              <LocaleToggle
+                on={maintenanceEnabled}
+                disabled={maintenanceSaving}
+                label="maintenance mode"
+                onChange={handleMaintenanceToggle}
+              />
+            </InlineStack>
+            <BlockStack gap="200">
+              <Text as="span" variant="bodyMd">
+                {locale === "tr" ? "Görsel" : locale === "en" ? "Image" : "Bild"}
+              </Text>
+              {maintenanceImageUrl ? (
+                <img
+                  src={maintenanceImageUrl}
+                  alt=""
+                  style={{ width: "100%", maxWidth: 320, borderRadius: 8, border: "1px solid #e5e7eb", display: "block" }}
+                />
+              ) : (
+                <Text as="p" tone="subdued" variant="bodySm">
+                  {locale === "tr" ? "Henüz görsel seçilmedi." : locale === "en" ? "No image selected yet." : "Noch kein Bild ausgewählt."}
+                </Text>
+              )}
+              <InlineStack gap="200">
+                <Button onClick={() => setMaintenancePickerOpen(true)} disabled={maintenanceSaving}>
+                  {locale === "tr" ? "Görsel seç" : locale === "en" ? "Choose image" : "Bild auswählen"}
+                </Button>
+              </InlineStack>
+            </BlockStack>
+            {maintenanceError && <Banner tone="critical"><p>{maintenanceError}</p></Banner>}
+            <MediaPickerModal
+              open={maintenancePickerOpen}
+              onClose={() => setMaintenancePickerOpen(false)}
+              multiple={false}
+              onSelect={handleMaintenanceImageSelect}
+            />
           </BlockStack>
         </Card>
       )}

@@ -1,18 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useRef, useState, useCallback, useEffect, useMemo } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { routing } from "@/i18n/routing";
+import { useRouter } from "@/i18n/navigation";
 
 const UnsavedChangesContext = createContext(null);
-
-function getLocalizedPath(url) {
-  if (typeof window === "undefined") return url;
-  const pathname = window.location.pathname || "";
-  const locale = (pathname.match(/^\/([^/]+)/) || [])[1];
-  const validLocale = locale && routing.locales.includes(locale) ? locale : routing.defaultLocale;
-  return url.startsWith("/") ? `/${validLocale}${url}` : `/${validLocale}/${url}`;
-}
 
 export function UnsavedChangesProvider({ children }) {
   const router = useRouter();
@@ -41,8 +32,9 @@ export function UnsavedChangesProvider({ children }) {
       setDirty(false);
       setShowNavigateConfirm(false);
       if (pendingNav) {
-        const to = getLocalizedPath(pendingNav);
+        const to = pendingNav;
         setPendingNav(null);
+        // next-intl router already prefixes locale — do not double-prefix.
         router.push(to);
       }
     } catch {
@@ -56,7 +48,7 @@ export function UnsavedChangesProvider({ children }) {
     setDirty(false);
     setShowNavigateConfirm(false);
     if (pendingNav) {
-      const to = getLocalizedPath(pendingNav);
+      const to = pendingNav;
       setPendingNav(null);
       router.push(to);
     }

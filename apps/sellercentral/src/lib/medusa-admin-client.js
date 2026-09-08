@@ -403,6 +403,8 @@ class MedusaAdminClient {
       locale: ['en', 'de', 'tr', 'fr', 'it', 'es'].includes(String(res?.locale || '').toLowerCase())
         ? String(res.locale).toLowerCase()
         : 'de',
+      maintenance_mode_enabled: res?.maintenance_mode_enabled === true,
+      maintenance_mode_image_url: res?.maintenance_mode_image_url ?? '',
     };
   }
 
@@ -505,6 +507,14 @@ class MedusaAdminClient {
     return this.request(`/admin-hub/v1/categories/${categoryId}/compliance-profile`, {
       method: 'PATCH',
       body: JSON.stringify({ profile_id: profileId || null }),
+    })
+  }
+
+  /** Superuser: full-replace this category's own manually-added required fields (not inherited by children). */
+  async setCategoryComplianceCustomFields(categoryId, fields) {
+    return this.request(`/admin-hub/v1/categories/${categoryId}/compliance-custom-fields`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fields: fields || [] }),
     })
   }
 
@@ -1902,6 +1912,27 @@ class MedusaAdminClient {
       method: "POST",
       body: JSON.stringify({ affiliate_code, flag_type, severity, notes }),
     });
+  }
+  async getAffiliateCommissionAdjustments() {
+    return this.request(`/admin-hub/v1/affiliate-admin/commission-adjustments`);
+  }
+  async createAffiliateCommissionAdjustment({ affiliate_code, type, amount_eur, reason }) {
+    return this.request(`/admin-hub/v1/affiliate-admin/commission-adjustments`, {
+      method: "POST",
+      body: JSON.stringify({ affiliate_code, type, amount_eur, reason }),
+    });
+  }
+  async getAffiliateLinksByCode(affiliateCode) {
+    return this.request(`/admin-hub/v1/affiliate-admin/links?affiliate_code=${encodeURIComponent(affiliateCode)}`);
+  }
+  async disableAffiliateLink(id, reason) {
+    return this.request(`/admin-hub/v1/affiliate-admin/links/${id}/disable`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+  async enableAffiliateLink(id) {
+    return this.request(`/admin-hub/v1/affiliate-admin/links/${id}/enable`, { method: "POST" });
   }
 
   async getMarketingAnalytics(params = {}) {

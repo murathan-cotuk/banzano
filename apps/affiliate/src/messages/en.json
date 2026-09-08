@@ -2,8 +2,11 @@
   "nav": {
     "dashboard": "Dashboard",
     "links": "Links",
+    "referrals": "Referrals",
     "reports": "Reports",
+    "payouts": "Payouts",
     "resources": "Resources",
+    "settings": "Settings",
     "terms": "Terms",
     "logout": "Log out"
   },
@@ -30,7 +33,10 @@
     "requiredFields": "Name, email, and password are required.",
     "requiredCountry": "Country is required.",
     "passwordTooShort": "Password must be at least 8 characters.",
-    "mustAgree": "You must accept the terms to register."
+    "mustAgree": "You must accept the terms to register.",
+    "viewTerms": "View Affiliate Terms",
+    "viewPrivacy": "View Privacy Policy",
+    "selectCountry": "Select country"
   },
   "dashboard": {
     "title": "Track your links, clicks, and commissions",

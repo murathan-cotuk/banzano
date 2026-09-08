@@ -16,8 +16,25 @@ const {
 const {
   isStorePublishedStatus, isStoreVisibleSellerProduct, storePublishedStatusSql, getApprovedSellerIdsSet,
 } = require('./seller-settings')
+const { loadPlatformCheckoutRow, resolveStripeSecretKeyFromPlatform } = require('./platform-checkout')
 
 const getDbClient = () => require('../db-pool').getPooledClient()
+
+const AFFILIATE_PORTAL_URL = (process.env.AFFILIATE_PORTAL_URL || process.env.NEXT_PUBLIC_AFFILIATE_PORTAL_URL || 'http://localhost:3004').replace(/\/$/, '')
+
+async function loadPlatformStripeSecretKey() {
+  const client = getDbClient()
+  if (!client) return ''
+  try {
+    await client.connect()
+    const row = await loadPlatformCheckoutRow(client)
+    return resolveStripeSecretKeyFromPlatform(row)
+  } catch (_) {
+    return ''
+  } finally {
+    try { await client.end() } catch (_) {}
+  }
+}
 
 function requireAffiliateAuth(req, res, next) {
   const auth = req.headers.authorization || ''
@@ -233,6 +250,137 @@ module.exports = function createAffiliateApiRouter() {
       params,
     )
     res.json({ commissions: r.rows, currency: config.CURRENCY })
+  }))
+
+  // ── Stripe Connect (docs/affiliate.md: affiliate/settings — Stripe Connect onboarding).
+  // Mirrors routes/stripe-connect.js's seller onboarding flow exactly (Express account, manual
+  // payout schedule since Andertal-initiated transfers drive payouts, not Stripe's own schedule),
+  // just scoped to the affiliates table instead of seller_users. Without this, stripe_account_id
+  // can never be populated and payout-scheduler.js's runMonthlyAffiliatePayouts() would skip every
+  // affiliate forever (skipped_no_stripe_account). ──
+  router.post('/stripe-connect/onboard', requireAffiliateAuth, withClient(async (req, res, client) => {
+    const secretKey = await loadPlatformStripeSecretKey()
+    if (!secretKey) return res.status(503).json({ message: 'Stripe is not configured on the platform yet.' })
+
+    const r = await client.query('SELECT email, stripe_account_id FROM affiliates WHERE id = $1', [req.affiliate.id])
+    const affiliate = r.rows[0]
+    if (!affiliate) return res.status(404).json({ message: 'Affiliate not found' })
+
+    const stripe = new (require('stripe'))(secretKey)
+    let stripeAccountId = affiliate.stripe_account_id
+
+    if (!stripeAccountId) {
+      const account = await stripe.accounts.create({
+        type: 'express',
+        email: affiliate.email,
+        capabilities: { transfers: { requested: true } },
+        settings: { payouts: { schedule: { interval: 'manual' } } },
+        metadata: { affiliate_id: req.affiliate.id },
+      })
+      stripeAccountId = account.id
+      await client.query(
+        `UPDATE affiliates SET stripe_account_id = $1, updated_at = now() WHERE id = $2`,
+        [stripeAccountId, req.affiliate.id],
+      )
+    }
+
+    const accountLink = await stripe.accountLinks.create({
+      account: stripeAccountId,
+      refresh_url: `${AFFILIATE_PORTAL_URL}/en/settings?refresh=true`,
+      return_url: `${AFFILIATE_PORTAL_URL}/en/settings?connected=true`,
+      type: 'account_onboarding',
+    })
+    res.json({ url: accountLink.url, stripe_account_id: stripeAccountId })
+  }))
+
+  // ── GET /stripe-connect/status — current Connect status; syncs onboarding_complete from Stripe
+  // the same way stripe-connect.js does for sellers. ──
+  router.get('/stripe-connect/status', requireAffiliateAuth, withClient(async (req, res, client) => {
+    const r = await client.query(
+      'SELECT stripe_account_id, stripe_onboarding_complete FROM affiliates WHERE id = $1',
+      [req.affiliate.id],
+    )
+    const row = r.rows[0] || {}
+    const stripeAccountId = row.stripe_account_id || null
+    let onboardingComplete = !!row.stripe_onboarding_complete
+
+    if (stripeAccountId && !onboardingComplete) {
+      const secretKey = await loadPlatformStripeSecretKey()
+      if (secretKey) {
+        try {
+          const stripe = new (require('stripe'))(secretKey)
+          const account = await stripe.accounts.retrieve(stripeAccountId)
+          onboardingComplete = !!(account.details_submitted && account.payouts_enabled)
+          if (onboardingComplete) {
+            await client.query(
+              `UPDATE affiliates SET stripe_onboarding_complete = true, updated_at = now() WHERE id = $1`,
+              [req.affiliate.id],
+            )
+          }
+        } catch (_) {}
+      }
+    }
+
+    res.json({ connected: !!stripeAccountId, onboarding_complete: onboardingComplete, stripe_account_id: stripeAccountId })
+  }))
+
+  // ── GET /stripe-connect/dashboard-link — one-time Express dashboard URL, same as sellers get. ──
+  router.get('/stripe-connect/dashboard-link', requireAffiliateAuth, withClient(async (req, res, client) => {
+    const r = await client.query('SELECT stripe_account_id FROM affiliates WHERE id = $1', [req.affiliate.id])
+    const stripeAccountId = r.rows[0]?.stripe_account_id
+    if (!stripeAccountId) return res.status(404).json({ message: 'No Stripe account connected yet.' })
+
+    const secretKey = await loadPlatformStripeSecretKey()
+    if (!secretKey) return res.status(503).json({ message: 'Stripe is not configured on the platform yet.' })
+
+    const stripe = new (require('stripe'))(secretKey)
+    const loginLink = await stripe.accounts.createLoginLink(stripeAccountId)
+    res.json({ url: loginLink.url })
+  }))
+
+  // ── GET /referrals — sellers this affiliate referred (Model 1), anonymized per docs/affiliate.md
+  // ("S-1234", not the seller's real name) plus this-month / lifetime earnings from their
+  // seller_referral commissions. ──
+  router.get('/referrals', requireAffiliateAuth, withClient(async (req, res, client) => {
+    const r = await client.query(
+      `SELECT sr.id, sr.seller_id, sr.referred_at, sr.commission_tier_active, sr.current_rate_pct,
+              COALESCE(SUM(ac.commission_cents) FILTER (
+                WHERE ac.status IN ('confirmed','paid') AND ac.earned_at >= date_trunc('month', now())
+              ), 0)::int AS this_month_cents,
+              COALESCE(SUM(ac.commission_cents) FILTER (WHERE ac.status IN ('confirmed','paid')), 0)::int AS lifetime_cents
+         FROM seller_referrals sr
+         LEFT JOIN affiliate_commissions ac
+           ON ac.affiliate_id = sr.affiliate_id AND ac.seller_id = sr.seller_id AND ac.source_type = 'seller_referral'
+        WHERE sr.affiliate_id = $1
+        GROUP BY sr.id
+        ORDER BY sr.referred_at DESC`,
+      [req.affiliate.id],
+    )
+    const referrals = r.rows.map((row, i) => ({
+      label: `S-${String(row.seller_id || '').slice(-4).padStart(4, '0') || (1000 + i)}`,
+      referred_at: row.referred_at,
+      active: row.commission_tier_active,
+      rate_pct: row.current_rate_pct,
+      this_month_cents: row.this_month_cents,
+      lifetime_cents: row.lifetime_cents,
+    }))
+    res.json({ referrals, currency: config.CURRENCY })
+  }))
+
+  // ── GET /payouts — this affiliate's own payout history (PR 10's affiliate portal Payouts page;
+  // previously only exposed to superusers via affiliate-admin.js). ──
+  router.get('/payouts', requireAffiliateAuth, withClient(async (req, res, client) => {
+    const r = await client.query(
+      `SELECT id, amount_cents, currency, status, stripe_transfer_id, period_start, period_end, created_at, paid_at
+         FROM affiliate_payouts WHERE affiliate_id = $1 ORDER BY created_at DESC LIMIT 200`,
+      [req.affiliate.id],
+    )
+    const pendingRes = await client.query(
+      `SELECT COALESCE(SUM(commission_cents), 0)::int AS cents
+         FROM affiliate_commissions WHERE affiliate_id = $1 AND status = 'confirmed' AND payout_id IS NULL`,
+      [req.affiliate.id],
+    )
+    res.json({ payouts: r.rows, next_estimated_cents: pendingRes.rows[0].cents, currency: config.CURRENCY })
   }))
 
   return router

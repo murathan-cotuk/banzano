@@ -840,6 +840,10 @@ async function start() {
         await client.query(`UPDATE admin_hub_seller_settings SET admin_notification_email = 'info@andertal.com' WHERE seller_id = 'default' AND admin_notification_email IS NULL`).catch(() => {})
         await client.query(`ALTER TABLE admin_hub_seller_settings ADD COLUMN IF NOT EXISTS announcement_bar_items jsonb`).catch(() => {})
         await client.query(`ALTER TABLE admin_hub_seller_settings ADD COLUMN IF NOT EXISTS logo_config jsonb`).catch(() => {})
+        // Platform-wide "coming soon" / maintenance mode — always lives on seller_id='default',
+        // same convention as enabled_shop_locales (superuser-only, platform-wide toggle).
+        await client.query(`ALTER TABLE admin_hub_seller_settings ADD COLUMN IF NOT EXISTS maintenance_mode_enabled boolean DEFAULT false`).catch(() => {})
+        await client.query(`ALTER TABLE admin_hub_seller_settings ADD COLUMN IF NOT EXISTS maintenance_mode_image_url text`).catch(() => {})
         await client.query(`
           CREATE TABLE IF NOT EXISTS admin_hub_banners (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2170,7 +2174,11 @@ async function start() {
       return requireSellerAuth(req, res, next)
     })
 
-    // Public store endpoints: stale-while-revalidate cache headers
+    // After successful admin-hub writes, ask the shop to drop storefront caches immediately.
+    const { shopRevalidateAdminWriteMiddleware } = require('./src/shop-revalidate')
+    httpApp.use(shopRevalidateAdminWriteMiddleware)
+
+    // Public store endpoints: short TTLs (shop also gets on-demand /api/revalidate on admin writes).
     // Private paths (cart, orders, customer, payment) must NOT be cached publicly.
     httpApp.use('/store', (req, res, next) => {
       if (req.method !== 'GET') return next()
@@ -2178,24 +2186,22 @@ async function start() {
       // Never cache personal / transactional endpoints
       const noCache = ['/carts', '/orders', '/customers', '/payment', '/wishlist', '/payment-methods', '/public-payment-config']
       if (noCache.some((prefix) => p === prefix || p.startsWith(prefix + '/'))) return next()
-      // Menus and categories change rarely
       if (p === '/menus' || p === '/menu-locations') {
-        res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600')
+        res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=60')
       } else if (p === '/categories' || p.startsWith('/categories/')) {
-        res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600')
+        res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=60')
       } else if (p === '/collections' || p.startsWith('/collections/')) {
-        res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600')
+        res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
       } else if (p === '/brands' || p.startsWith('/brands/')) {
-        res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600')
+        res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
       } else if (p === '/products' || p.startsWith('/products/')) {
-        res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+        res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=60')
         res.set('Vary', 'Accept-Encoding')
       } else if (p.startsWith('/seller-settings') || p.startsWith('/seller-profile') || p.startsWith('/approved-seller-ids')) {
-        res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+        res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=60')
       } else if (p.startsWith('/page-by-label-slug/')) {
-        res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=3600')
+        res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
       }
-      // All others: no explicit cache header (Express default: no Cache-Control)
       next()
     })
 

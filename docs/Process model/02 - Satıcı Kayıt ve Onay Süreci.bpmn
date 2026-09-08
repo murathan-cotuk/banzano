@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_SellerOnboarding"
+                  targetNamespace="https://andertal.com/bpmn">
+  <bpmn:collaboration id="Collab_SellerOnboarding">
+    <bpmn:participant id="Pool_SellerOnboarding" name="Satıcı Kayıt ve Onay Süreci" processRef="Process_SellerOnboarding" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_SellerOnboarding" name="Satıcı Kayıt ve Onay Süreci" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_SellerOnboarding">
+      <bpmn:lane id="Lane_SellerOnboarding_0" name="Satıcı Adayı">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_docs</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_start_selling</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_active</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_SellerOnboarding_1" name="SellerCentral">
+
+      </bpmn:lane>
+      <bpmn:lane id="Lane_SellerOnboarding_2" name="Backend / Sistem">
+        <bpmn:flowNodeRef>task_create_account</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_approve</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_publish_products</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_SellerOnboarding_3" name="Superuser">
+        <bpmn:flowNodeRef>task_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_approved</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Kayıt Formunu Doldur">
+      <bpmn:outgoing>Flow_SellerOnboarding_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="task_docs" name="Zorunlu Bilgileri Gir
+(IBAN, Kredi Kartı, Adresler)">
+      <bpmn:incoming>Flow_SellerOnboarding_0</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_create_account" name="Hesap Oluştur
+(status = pending)">
+      <bpmn:incoming>Flow_SellerOnboarding_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_review" name="Başvuruyu İncele">
+      <bpmn:incoming>Flow_SellerOnboarding_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_approved" name="Onaylandı mı?">
+      <bpmn:incoming>Flow_SellerOnboarding_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_4</bpmn:outgoing>
+      <bpmn:outgoing>Flow_SellerOnboarding_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_reject" name="Reddet + Bildirim Gönder">
+      <bpmn:incoming>Flow_SellerOnboarding_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_reject" name="Başvuru Reddedildi">
+      <bpmn:incoming>Flow_SellerOnboarding_5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_approve" name="Onayla
+(status = approved)">
+      <bpmn:incoming>Flow_SellerOnboarding_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_publish_products" name="Ürünleri Otomatik Yayına Al">
+      <bpmn:incoming>Flow_SellerOnboarding_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_start_selling" name="Satışa Başla">
+      <bpmn:incoming>Flow_SellerOnboarding_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_SellerOnboarding_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_active" name="Satıcı Aktif">
+      <bpmn:incoming>Flow_SellerOnboarding_9</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_0" sourceRef="start" targetRef="task_docs" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_1" sourceRef="task_docs" targetRef="task_create_account" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_2" sourceRef="task_create_account" targetRef="task_review" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_3" sourceRef="task_review" targetRef="gw_approved" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_4" sourceRef="gw_approved" targetRef="task_reject" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_5" sourceRef="task_reject" targetRef="end_reject" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_6" sourceRef="gw_approved" targetRef="task_approve" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_7" sourceRef="task_approve" targetRef="task_publish_products" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_8" sourceRef="task_publish_products" targetRef="task_start_selling" />
+    <bpmn:sequenceFlow id="Flow_SellerOnboarding_9" sourceRef="task_start_selling" targetRef="end_active" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_SellerOnboarding">
+    <bpmndi:BPMNPlane id="Plane_SellerOnboarding" bpmnElement="Collab_SellerOnboarding">
+      <bpmndi:BPMNShape id="Pool_SellerOnboarding_di" bpmnElement="Pool_SellerOnboarding" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="2110" height="720" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_SellerOnboarding_0_di" bpmnElement="Lane_SellerOnboarding_0" isHorizontal="true">
+        <dc:Bounds x="70" y="90" width="2080" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_SellerOnboarding_1_di" bpmnElement="Lane_SellerOnboarding_1" isHorizontal="true">
+        <dc:Bounds x="70" y="240" width="2080" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_SellerOnboarding_2_di" bpmnElement="Lane_SellerOnboarding_2" isHorizontal="true">
+        <dc:Bounds x="70" y="390" width="2080" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_SellerOnboarding_3_di" bpmnElement="Lane_SellerOnboarding_3" isHorizontal="true">
+        <dc:Bounds x="70" y="540" width="2080" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_docs_di" bpmnElement="task_docs">
+        <dc:Bounds x="330" y="120" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_create_account_di" bpmnElement="task_create_account">
+        <dc:Bounds x="500" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_review_di" bpmnElement="task_review">
+        <dc:Bounds x="670" y="570" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_approved_di" bpmnElement="gw_approved">
+        <dc:Bounds x="840" y="570" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_reject_di" bpmnElement="task_reject">
+        <dc:Bounds x="1010" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_reject_di" bpmnElement="end_reject">
+        <dc:Bounds x="1180" y="420" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_approve_di" bpmnElement="task_approve">
+        <dc:Bounds x="1350" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_publish_products_di" bpmnElement="task_publish_products">
+        <dc:Bounds x="1520" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_start_selling_di" bpmnElement="task_start_selling">
+        <dc:Bounds x="1690" y="120" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_active_di" bpmnElement="end_active">
+        <dc:Bounds x="1860" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_0_di" bpmnElement="Flow_SellerOnboarding_0">
+        <di:waypoint x="196" y="138" />
+        <di:waypoint x="330" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_1_di" bpmnElement="Flow_SellerOnboarding_1">
+        <di:waypoint x="460" y="155" />
+        <di:waypoint x="500" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_2_di" bpmnElement="Flow_SellerOnboarding_2">
+        <di:waypoint x="630" y="455" />
+        <di:waypoint x="670" y="605" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_3_di" bpmnElement="Flow_SellerOnboarding_3">
+        <di:waypoint x="800" y="605" />
+        <di:waypoint x="840" y="593" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_4_di" bpmnElement="Flow_SellerOnboarding_4">
+        <di:waypoint x="886" y="593" />
+        <di:waypoint x="1010" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_5_di" bpmnElement="Flow_SellerOnboarding_5">
+        <di:waypoint x="1140" y="455" />
+        <di:waypoint x="1180" y="438" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_6_di" bpmnElement="Flow_SellerOnboarding_6">
+        <di:waypoint x="886" y="593" />
+        <di:waypoint x="1350" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_7_di" bpmnElement="Flow_SellerOnboarding_7">
+        <di:waypoint x="1480" y="455" />
+        <di:waypoint x="1520" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_8_di" bpmnElement="Flow_SellerOnboarding_8">
+        <di:waypoint x="1650" y="455" />
+        <di:waypoint x="1690" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SellerOnboarding_9_di" bpmnElement="Flow_SellerOnboarding_9">
+        <di:waypoint x="1820" y="155" />
+        <di:waypoint x="1860" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

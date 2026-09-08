@@ -1,7 +1,8 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { statusLabel } from "@/lib/status-labels";
 import styled from "styled-components";
@@ -495,7 +496,7 @@ function CustomerCell({ order, locale, router, isSuperuser }) {
     e.stopPropagation();
     if (!isSuperuser || navigating) return;
     if (order.customer_id) {
-      router.push(`/${locale}/customers/${order.customer_id}`);
+      router.push(`/customers/${order.customer_id}`);
       return;
     }
     if (!order.email) return;
@@ -504,7 +505,7 @@ function CustomerCell({ order, locale, router, isSuperuser }) {
       const client = getMedusaAdminClient();
       const data = await client.getCustomers({ search: order.email, limit: 1 });
       const found = data?.customers?.[0];
-      if (found?.id) router.push(`/${locale}/customers/${found.id}`);
+      if (found?.id) router.push(`/customers/${found.id}`);
     } catch { }
     setNavigating(false);
   };
@@ -548,7 +549,7 @@ function ActionMenu({ order, onUpdate, onDelete, onVersenden, isSuperuser, showS
       content: ui.viewDetails,
       onAction: () => {
         setOpen(false);
-        router.push(`/${locale}/orders/${order.id}`);
+        router.push(`/orders/${order.id}`);
       },
     },
     ...(showShipInMenu
@@ -1184,7 +1185,7 @@ export default function OrdersPage() {
   // another tab still lands on the same order set — VersandPage re-fetches full detail per id anyway.
   const startPacking = (ordersToShip) => {
     const ids = ordersToShip.map((o) => o.id).filter(Boolean);
-    router.push(`/${locale}/shipping?ids=${encodeURIComponent(ids.join(","))}`);
+    router.push(`/shipping?ids=${encodeURIComponent(ids.join(","))}`);
   };
 
   const handleColSort = (sortKey) => {
@@ -1273,7 +1274,7 @@ export default function OrdersPage() {
           {!hc.has("order_number") && (
             <td style={{ ...CELL, fontWeight: 600 }}>
               <button
-                onClick={(e) => { e.stopPropagation(); router.push(`/${locale}/orders/${order.id}`); }}
+                onClick={(e) => { e.stopPropagation(); router.push(`/orders/${order.id}`); }}
                 style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontWeight: 600, fontSize: 12, color: "#111827", textDecoration: "underline" }}
               >
                 #{order.order_number || "—"}

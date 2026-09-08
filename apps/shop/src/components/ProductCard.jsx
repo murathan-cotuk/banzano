@@ -620,7 +620,7 @@ export function ProductCard({ product, activeFilters = {}, plainImage = false, i
           <Link href={productUrl} aria-label={displayTitle} style={{ position: "absolute", inset: 0, zIndex: 0 }}>
             {imgSrc ? (
               <>
-                <Image className="img-primary" src={imgSrc} alt={displayTitle} fill sizes="(max-width: 767px) 50vw, 300px" />
+                <Image className="img-primary" src={imgSrc} alt={displayTitle} fill sizes="(max-width: 767px) 50vw, 300px" referrerPolicy="no-referrer" />
                 {imgSrc2 && !plainImage ? <Image className="img-secondary" src={imgSrc2} alt="" aria-hidden fill sizes="(max-width: 767px) 50vw, 300px" /> : null}
               </>
             ) : (
@@ -631,7 +631,7 @@ export function ProductCard({ product, activeFilters = {}, plainImage = false, i
           <>
             {imgSrc ? (
               <>
-                <Image className="img-primary" src={imgSrc} alt={displayTitle} fill sizes="(max-width: 767px) 50vw, 300px" />
+                <Image className="img-primary" src={imgSrc} alt={displayTitle} fill sizes="(max-width: 767px) 50vw, 300px" referrerPolicy="no-referrer" />
                 {imgSrc2 && !plainImage ? <Image className="img-secondary" src={imgSrc2} alt="" aria-hidden fill sizes="(max-width: 767px) 50vw, 300px" /> : null}
               </>
             ) : (
@@ -1054,7 +1054,7 @@ export function ProductListItem({ product, activeFilters = {}, isBestseller: _is
     <ListCard>
       <Link href={productUrl} style={{ flexShrink: 0, textDecoration: "none" }}>
         <ListImgWrap>
-          {imgSrc ? <Image src={imgSrc} alt={displayTitle} fill sizes="110px" style={{ objectFit: "contain" }} /> : null}
+          {imgSrc ? <Image src={imgSrc} alt={displayTitle} fill sizes="110px" style={{ objectFit: "contain" }} referrerPolicy="no-referrer" /> : null}
           <CustomProductBadges badges={product?.metadata?.custom_badges} locale={locale} />
         </ListImgWrap>
       </Link>

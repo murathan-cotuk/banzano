@@ -17,7 +17,7 @@ import { LogoutButton } from "@andertal/ui";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { restPathFromPathname } from "@/lib/shop-market";
-import { resolveImageUrl } from "@/lib/image-url";
+import { findCategoryNodeById, mapCategoryNodesToMenuRows, shouldCategoryMenuDrill } from "@/lib/category-menu-rows";
 import ModernMobileBottomNav from "@/components/ModernMobileBottomNav";
 import { useShopStyles } from "@/context/ShopStylesContext";
 import {
@@ -300,16 +300,6 @@ function appPathFromPathname(pathname) {
   return rest === "" ? "/" : rest.startsWith("/") ? rest : `/${rest}`;
 }
 
-/** Seller "Category image" (metadata.image_url) + fallbacks from Admin Hub category */
-function categoryListImageUrl(node) {
-  if (!node) return "";
-  const meta = node.metadata && typeof node.metadata === "object" ? node.metadata : {};
-  const a = meta.image_url || meta.imageUrl;
-  const b = node.banner_image_url || meta.banner_image_url;
-  const raw = a || b || "";
-  return String(raw).trim();
-}
-
 /* ─── Main component ─────────────────────────────────────── */
 export default function MobileNav({ layout = "fixed" }) {
   const shopStyles = useShopStyles();
@@ -325,7 +315,8 @@ export default function MobileNav({ layout = "fixed" }) {
   const { ids: wishlistIds } = useWishlist();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState("menu"); // "menu" | "account"
-  const [categories, setCategories] = useState([]);
+  const [categoryTree, setCategoryTree] = useState([]);
+  const [categoryDrillStack, setCategoryDrillStack] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isMobileNavViewport, setIsMobileNavViewport] = useState(false);
@@ -358,23 +349,11 @@ export default function MobileNav({ layout = "fixed" }) {
   useEffect(() => {
     let cancelled = false;
     setCategoriesLoading(true);
-    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 })
       .then((d) => {
         if (cancelled) return;
-        const tree = d?.tree || [];
-        const roots = tree
-          .filter((n) => n && !n.parent_id && n.has_products !== false && n.slug)
-          .map((n) => {
-            const imageRaw = categoryListImageUrl(n);
-            return {
-              id: n.id,
-              label: n.name || n.slug,
-              href: `/${String(n.slug).replace(/^\//, "")}`,
-              imageUrl: imageRaw ? resolveImageUrl(imageRaw) : "",
-            };
-          })
-          .sort((a, b) => a.label.localeCompare(b.label));
-        setCategories(roots);
+        setCategoryTree(Array.isArray(d?.tree) ? d.tree : []);
+        setCategoryDrillStack([]);
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setCategoriesLoading(false); });
@@ -385,6 +364,7 @@ export default function MobileNav({ layout = "fixed" }) {
   useEffect(() => {
     setDrawerOpen(false);
     setDrawerTarget("menu");
+    setCategoryDrillStack([]);
   }, [pathname]);
 
   /* Body scroll lock when drawer open */
@@ -404,7 +384,17 @@ export default function MobileNav({ layout = "fixed" }) {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+    setCategoryDrillStack([]);
+  }, []);
+
+  const drillCurrent = categoryDrillStack.length ? categoryDrillStack[categoryDrillStack.length - 1] : null;
+  const drillParent = drillCurrent ? findCategoryNodeById(categoryTree, drillCurrent.id) : null;
+  const categoryRows = mapCategoryNodesToMenuRows(
+    drillParent ? drillParent.children : categoryTree,
+    locale,
+  );
 
   useEffect(() => {
     if (!drawerOpen || drawerTarget !== "account") return;
@@ -480,7 +470,7 @@ export default function MobileNav({ layout = "fixed" }) {
 
         {/* Drawer scrollable body: categories first, Mein Konto at bottom (no CMS “Menü” / no Service) */}
         <div ref={drawerBodyRef} style={css.drawerBody}>
-          {categoriesLoading && categories.length === 0 && (
+          {categoriesLoading && categoryTree.length === 0 && (
             <>
               <div style={css.sectionLabel}>{t("categories")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 16px 12px" }}>
@@ -492,15 +482,41 @@ export default function MobileNav({ layout = "fixed" }) {
             </>
           )}
 
-          {categories.length > 0 && (
+          {(categoryRows.length > 0 || drillCurrent) && (
             <>
               <div style={css.sectionLabel}>{t("categories")}</div>
               <div>
-                {categories.slice(0, 18).map((cat) => (
+                {drillCurrent ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryDrillStack((s) => s.slice(0, -1))}
+                      style={{ ...css.categoryRowBtn, width: "100%", border: "none", background: "transparent", font: "inherit", textAlign: "left" }}
+                    >
+                      <span style={{ width: 36, textAlign: "center", fontSize: 16 }}>←</span>
+                      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>{t("back")}</span>
+                    </button>
+                    <Link
+                      href={`/${String(drillCurrent.slug || "").replace(/^\//, "")}`}
+                      onClick={closeDrawer}
+                      style={{ ...css.categoryRowBtn, textDecoration: "none", display: "flex", fontWeight: 700 }}
+                    >
+                      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>{drillCurrent.label}</span>
+                    </Link>
+                  </>
+                ) : null}
+                {categoryRows.map((cat) => (
                   <Link
                     key={cat.id}
-                    href={cat.href}
-                    onClick={closeDrawer}
+                    href={`/${cat.slug}`}
+                    onClick={(e) => {
+                      if (shouldCategoryMenuDrill(e, cat.hasChildren)) {
+                        e.preventDefault();
+                        setCategoryDrillStack((s) => [...s, { id: cat.id, label: cat.label, slug: cat.slug }]);
+                        return;
+                      }
+                      closeDrawer();
+                    }}
                     style={{ ...css.categoryRowBtn, textDecoration: "none", display: "flex" }}
                   >
                     {cat.imageUrl ? <img src={cat.imageUrl} alt="" style={css.categoryThumb} /> : <div style={css.categoryThumbPlaceholder} aria-hidden />}
@@ -512,7 +528,7 @@ export default function MobileNav({ layout = "fixed" }) {
             </>
           )}
 
-          {categories.length > 0 && <div style={css.divider} />}
+          {(categoryRows.length > 0 || drillCurrent) && <div style={css.divider} />}
 
           {isAuthenticated ? (
             <>

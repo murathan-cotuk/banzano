@@ -3,7 +3,7 @@
 import React from "react";
 import styled from "styled-components";
 import { Card } from "@andertal/ui";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { getAdvertisePageCopy } from "@/lib/advertise-pages-i18n";
 

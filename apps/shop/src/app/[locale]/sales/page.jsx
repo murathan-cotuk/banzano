@@ -250,10 +250,10 @@ export default function SalesPage() {
         setLoading(true);
         setError("");
         const [catData, prData, settingsRes] = await Promise.all([
-          cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 }).catch(() => ({ tree: [] })),
+          cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 }).catch(() => ({ tree: [] })),
           // Large catalog snapshot (up to 1200 products) — cached client-side for 2 min so
           // revisits/back-navigation don't re-pull the full payload from the backend each time.
-          cachedJsonFetch("/api/store-products?limit=1200", { ttlMs: 120000 }).catch(() => ({ products: [] })),
+          cachedJsonFetch("/api/store-products?limit=1200", { ttlMs: 15000 }).catch(() => ({ products: [] })),
           fetch("/api/store-api-page-settings/sales").catch(() => null),
         ]);
         const settingsData = settingsRes && settingsRes.ok ? await settingsRes.json().catch(() => null) : null;

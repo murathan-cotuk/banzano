@@ -2,8 +2,11 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "links": "Liens",
+    "referrals": "Parrainages",
     "reports": "Rapports",
+    "payouts": "Paiements",
     "resources": "Ressources",
+    "settings": "Paramètres",
     "terms": "Conditions",
     "logout": "Déconnexion"
   },
@@ -30,7 +33,10 @@
     "requiredFields": "Le nom, l'e-mail et le mot de passe sont requis.",
     "requiredCountry": "Le pays est requis.",
     "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères.",
-    "mustAgree": "Vous devez accepter les conditions pour vous inscrire."
+    "mustAgree": "Vous devez accepter les conditions pour vous inscrire.",
+    "viewTerms": "Voir les conditions d'affiliation",
+    "viewPrivacy": "Voir la politique de confidentialité",
+    "selectCountry": "Sélectionner un pays"
   },
   "dashboard": {
     "title": "Suivez vos liens, clics et commissions",

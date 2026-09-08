@@ -12,7 +12,7 @@ import {
   Banner,
   InlineStack,
 } from "@shopify/polaris";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { getUI } from "@/lib/ui-strings";
 

@@ -31,7 +31,7 @@ import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 import { resolveImageUrl } from "@/lib/image-url";
 import { getUI } from "@/lib/ui-strings";
 import { lt } from "@/lib/locale-text";
-import { titleToHandle, sanitizeSeoHandleInput } from "@/lib/slugify";
+import { titleToHandle, sanitizeSeoHandleInput, isPlaceholderHandle } from "@/lib/slugify";
 import { useUnsavedChanges } from "@/context/UnsavedChangesContext";
 import MediaPickerModal from "@/components/MediaPickerModal";
 import InfoIconTooltip from "@/components/InfoIconTooltip";
@@ -286,7 +286,8 @@ function productEditCopy(locale) {
     viewInShop: lt(locale, "View in shop", "Mağazada gör", "Voir dans la boutique", "Ver en la tienda", "Vedi nel negozio", "Im Shop ansehen"),
     quantity: lt(locale, "Quantity", "Adet", "Quantité", "Cantidad", "Quantità", "Menge"),
     description: lt(locale, "Description", "Açıklama", "Description", "Descripción", "Descrizione", "Beschreibung"),
-    descriptionHint: lt(locale, "Shown on the product page.", "Ürün sayfasında gösterilir.", "Affiché sur la page produit.", "Se muestra en la página del producto.", "Mostrato nella pagina prodotto.", "Wird auf der Produktseite angezeigt."),
+    descriptionHint: lt(locale, "Shown on the product page. Empty languages are filled automatically on save (DeepL).", "Ürün sayfasında gösterilir. Boş diller kaydetmede otomatik doldurulur (DeepL).", "Affiché sur la page produit. Les langues vides sont remplies automatiquement à l’enregistrement (DeepL).", "Se muestra en la página del producto. Los idiomas vacíos se rellenan al guardar (DeepL).", "Mostrato nella pagina prodotto. Le lingue vuote si compilano automaticamente al salvataggio (DeepL).", "Wird auf der Produktseite angezeigt. Leere Sprachen werden beim Speichern automatisch gefüllt (DeepL)."),
+    titleHelp: lt(locale, "Empty languages are translated automatically when you save. Edit a language to keep your own wording.", "Boş diller kaydederken otomatik çevrilir. Kendi metniniz kalsın diye o dili düzenleyin.", "Les langues vides sont traduites automatiquement à l’enregistrement. Modifiez une langue pour conserver votre texte.", "Los idiomas vacíos se traducen al guardar. Edita un idioma para conservar tu texto.", "Le lingue vuote si traducono al salvataggio. Modifica una lingua per tenere il tuo testo.", "Leere Sprachen werden beim Speichern automatisch übersetzt. Eine Sprache selbst bearbeiten, um den eigenen Text zu behalten."),
     bullets: lt(locale, "Bullet points (max 5)", "Madde işaretleri (en fazla 5)", "Puces (max. 5)", "Viñetas (máx. 5)", "Punti elenco (max 5)", "Aufzählungspunkte (max. 5)"),
     bulletsHelp: lt(locale, "Short selling points shown on the product page. Max. 120 characters each.", "Ürün sayfasında görünen kısa satış noktaları. Her biri en fazla 120 karakter.", "Arguments de vente courts affichés sur la page produit. Max. 120 caractères chacun.", "Argumentos de venta cortos en la página del producto. Máx. 120 caracteres cada uno.", "Punti vendita brevi mostrati nella pagina prodotto. Max. 120 caratteri ciascuno.", "Kurze Verkaufsargumente auf der Produktseite. Je max. 120 Zeichen."),
     noVariantGroups: lt(locale, "No variant groups yet. Click + Add Group to start.", "Henüz varyant grubu yok. Başlamak için + Grup ekle’ye tıklayın.", "Aucun groupe de variantes. Cliquez sur + Ajouter un groupe.", "Aún no hay grupos de variantes. Pulsa + Añadir grupo.", "Nessun gruppo di varianti. Clicca + Aggiungi gruppo.", "Noch keine Variantengruppen. Klicken Sie auf + Gruppe hinzufügen."),
@@ -369,6 +370,41 @@ function getEmptyProduct() {
     metadata: {},
     variants: [],
   };
+}
+
+function isPlaceholderProductTitle(value) {
+  const t = String(value || "").trim();
+  return !t || /^(untitled|unbenannt)$/i.test(t);
+}
+
+function isEmptyProductHtml(value) {
+  const t = String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return !t;
+}
+
+function coerceProductMediaList(list) {
+  if (!Array.isArray(list)) {
+    if (list != null && String(list).trim() !== "") return [String(list).trim()];
+    return [];
+  }
+  return list
+    .map((u) => {
+      if (u == null) return "";
+      if (typeof u === "string") return u.trim();
+      if (typeof u === "object") return String(u.url || u.src || u.path || "").trim();
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function withAutoTranslateNote(base, locale, locales) {
+  if (!Array.isArray(locales) || !locales.length) return base;
+  const list = locales.join(", ");
+  return `${base} ${lt(locale, `Other languages updated: ${list}.`, `Diğer diller güncellendi: ${list}.`, `Autres langues mises à jour : ${list}.`, `Otros idiomas actualizados: ${list}.`, `Altre lingue aggiornate: ${list}.`, `Weitere Sprachen aktualisiert: ${list}.`)}`;
 }
 
 /** Seller-owned listing fields — never copy from another seller's catalog match (EAN / URL / existing_id). */
@@ -863,10 +899,13 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
     // Discard bar out immediately after it appears. setHandlers/clearHandlers/setDirty are all
     // stable identities (useCallback / raw useState setter), so this only needs to register once
     // per mount and clean up once on real unmount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unsaved?.setHandlers, unsaved?.clearHandlers, unsaved?.setDirty]);
 
   const meta = product?.metadata && typeof product.metadata === "object" ? product.metadata : {};
+  // Locked once a product exists with a category, since category drives which compliance
+  // fields apply (Rechtlich tab) — changing it later would strand a product between two sets
+  // of required fields.
+  const categoryLocked = !isNew && Boolean(getMeta(product, "category_id"));
 
   // Per-locale content for the currently editing locale
   const editingTr = (meta.translations || {})[locale] || {};
@@ -1159,6 +1198,12 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       const locData = { ...(tr[locale] || {}) };
       if (key === "handle" && (value === "" || value == null)) delete locData.handle;
       else locData[key] = value;
+      if (locData._auto && typeof locData._auto === "object" && locData._auto[key]) {
+        const auto = { ...locData._auto };
+        delete auto[key];
+        if (Object.keys(auto).length) locData._auto = auto;
+        else delete locData._auto;
+      }
       tr[locale] = locData;
       m.translations = tr;
       // Keep product.title / product.description in sync for the primary DE locale
@@ -1312,14 +1357,60 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         description: editingDescToSave,
         bullet_points: editingBullets,
       };
-      // Ensure 'de' always has a canonical title for the shop
+      // Shop + inventory overview read DE/canonical fields. Editing another locale
+      // used to leave DE as "Untitled" with empty media, so the shop never saw the name/image.
+      const locTitle = String(allTranslations[locale]?.title || "").trim();
+      if (isPlaceholderProductTitle(allTranslations.de?.title) && !isPlaceholderProductTitle(locTitle)) {
+        allTranslations.de = { ...(allTranslations.de || {}), title: locTitle };
+        allTranslations.de._auto = { ...(allTranslations.de._auto || {}), title: true };
+      }
+      if (isPlaceholderProductTitle(allTranslations.de?.title) && !isPlaceholderProductTitle(product.title)) {
+        allTranslations.de = { ...(allTranslations.de || {}), title: String(product.title).trim() };
+      }
       if (!allTranslations.de?.title) {
         allTranslations.de = { ...(allTranslations.de || {}), title: product.title || "Untitled", description: product.description || "" };
       }
+      const locDesc = String(allTranslations[locale]?.description || "").trim();
+      if (locale !== "de" && isEmptyProductHtml(allTranslations.de?.description) && !isEmptyProductHtml(locDesc)) {
+        allTranslations.de = { ...(allTranslations.de || {}), description: locDesc };
+        allTranslations.de._auto = { ...(allTranslations.de._auto || {}), description: true };
+      }
+      const locBullets = Array.isArray(allTranslations[locale]?.bullet_points)
+        ? allTranslations[locale].bullet_points.map((b) => String(b || "").trim()).filter(Boolean)
+        : [];
+      const deBullets = Array.isArray(allTranslations.de?.bullet_points)
+        ? allTranslations.de.bullet_points.map((b) => String(b || "").trim()).filter(Boolean)
+        : [];
+      if (locale !== "de" && deBullets.length === 0 && locBullets.length) {
+        allTranslations.de = { ...(allTranslations.de || {}), bullet_points: locBullets };
+        allTranslations.de._auto = { ...(allTranslations.de._auto || {}), bullet_points: true };
+      }
+      const locMedia = coerceProductMediaList(allTranslations[locale]?.media);
+      const deMedia = coerceProductMediaList(allTranslations.de?.media);
+      const rootMedia = coerceProductMediaList(metadata.media);
+      if (rootMedia.length === 0 && deMedia.length === 0 && locMedia.length > 0) {
+        metadata.media = locMedia;
+        allTranslations.de = { ...(allTranslations.de || {}), media: locMedia };
+      } else if (rootMedia.length === 0 && deMedia.length > 0) {
+        metadata.media = deMedia;
+      } else if (deMedia.length === 0 && rootMedia.length > 0) {
+        allTranslations.de = { ...(allTranslations.de || {}), media: rootMedia };
+      }
+      const titleForHandle = isPlaceholderProductTitle(allTranslations.de?.title)
+        ? (locTitle || product.title || "")
+        : (allTranslations.de?.title || product.title || "");
+      const fromTitle = titleToHandle(titleForHandle) || "";
+      const currentHandle = (product.handle || "").trim();
       const canonicalHandle =
-        (product.handle || "").trim() ||
-        titleToHandle(allTranslations.de?.title || product.title || "product") ||
+        (!isPlaceholderHandle(currentHandle) ? currentHandle : "") ||
+        fromTitle ||
         "product";
+      for (const locKey of Object.keys(allTranslations)) {
+        const row = allTranslations[locKey] || {};
+        if (!isPlaceholderHandle(row.handle)) continue;
+        const locFromTitle = titleToHandle(row.title || "") || canonicalHandle;
+        allTranslations[locKey] = { ...row, handle: locFromTitle };
+      }
       allTranslations.de = { ...(allTranslations.de || {}), handle: canonicalHandle };
       metadata.translations = allTranslations;
       // variation_groups already in metadata (kept in sync by applyVariantGroups); re-serialize for safety
@@ -1371,7 +1462,9 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       }
       const collectionId = (metadata.collection_ids && metadata.collection_ids[0]) || product.collection_id || null;
       // Canonical title = DE locale (for backward compat with shop)
-      const canonicalTitle = metadata.translations?.de?.title || product.title || "Untitled";
+      const canonicalTitle = isPlaceholderProductTitle(metadata.translations?.de?.title)
+        ? (locTitle || product.title || "Untitled")
+        : (metadata.translations?.de?.title || product.title || "Untitled");
       // Canonical price = DE brutto price (for backward compat)
       const dePriceCents = (metadata.prices?.DE?.brutto_cents != null)
         ? Number(metadata.prices.DE.brutto_cents)
@@ -1387,6 +1480,8 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         inventory: product.inventory ?? 0,
         metadata,
         variants: variantsToSave,
+        source_locale: locale,
+        auto_translate: true,
         ...(collectionId !== undefined && { collection_id: collectionId }),
       };
       if (isNew) {
@@ -1406,7 +1501,7 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
             });
           }
         } else {
-          setMessage({ type: "success", text: locale === "en" ? "Product created." : locale === "tr" ? "Ürün oluşturuldu." : locale === "fr" ? "Produit créé." : locale === "es" ? "Producto creado." : locale === "it" ? "Prodotto creato." : "Produkt erstellt." });
+          setMessage({ type: "success", text: withAutoTranslateNote(locale === "en" ? "Product created." : locale === "tr" ? "Ürün oluşturuldu." : locale === "fr" ? "Produit créé." : locale === "es" ? "Producto creado." : locale === "it" ? "Prodotto creato." : "Produkt erstellt.", locale, res?.product?.auto_translated_locales || created?.auto_translated_locales) });
         }
         onReload?.();
         if (created?.id) {
@@ -1459,20 +1554,21 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       setProduct(savedProduct);
       setBaselineSnapshot(productSnapshot(savedProduct));
       unsaved?.setDirty(false);
-      // Görev 29: shop's public product cache is 60s (max-age), so a save here doesn't
-      // reflect on the live storefront instantly — say so, instead of leaving the seller
-      // to wonder why nothing changed when they immediately check the shop.
-      const cacheDelayNote = locale === "en" ? " Changes may take up to a minute to appear in the shop."
-        : locale === "tr" ? " Değişiklikler mağazada görünmesi bir dakikaya kadar sürebilir."
-        : locale === "fr" ? " Les changements peuvent prendre jusqu'à une minute pour apparaître dans la boutique."
-        : locale === "es" ? " Los cambios pueden tardar hasta un minuto en aparecer en la tienda."
-        : locale === "it" ? " Le modifiche possono richiedere fino a un minuto per apparire nel negozio."
-        : " Änderungen können bis zu einer Minute brauchen, bis sie im Shop sichtbar sind.";
-      setMessage({ type: "success", text: (updatedRaw?.listing_saved
+      // Shop receives on-demand /api/revalidate after admin writes (plus short TTLs).
+      const cacheDelayNote = locale === "en" ? " Shop cache is refreshed on save."
+        : locale === "tr" ? " Kayıtta shop önbelleği yenilenir."
+        : locale === "fr" ? " Le cache boutique est rafraîchi à l’enregistrement."
+        : locale === "es" ? " La caché de la tienda se actualiza al guardar."
+        : locale === "it" ? " La cache del negozio viene aggiornata al salvataggio."
+        : " Shop-Cache wird beim Speichern aktualisiert.";
+      const autoNoteLocales = updatedRaw?.listing_saved || updatedRaw?.suggestion_submitted
+        ? []
+        : (updatedRaw?.product?.auto_translated_locales || savedProduct?.auto_translated_locales);
+      setMessage({ type: "success", text: withAutoTranslateNote((updatedRaw?.listing_saved
         ? (updatedRaw?.suggestion_submitted
             ? changeRequestSubmittedMsg
             : (locale === "en" ? "Price, inventory and own data saved." : locale === "tr" ? "Fiyat, stok ve özel veriler kaydedildi." : locale === "fr" ? "Prix, stock et données propres enregistrés." : locale === "es" ? "Precio, inventario y datos propios guardados." : locale === "it" ? "Prezzo, inventario e dati propri salvati." : "Preis, Bestand und eigene Daten gespeichert."))
-        : ui.saved) + (updatedRaw?.suggestion_submitted ? "" : cacheDelayNote) });
+        : ui.saved) + (updatedRaw?.suggestion_submitted ? "" : cacheDelayNote), locale, autoNoteLocales) });
       await refetchPendingChangeRequests(savedProduct.id);
       onReload?.();
       return true;
@@ -1664,15 +1760,8 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
     locale !== "de" &&
     Object.prototype.hasOwnProperty.call((meta.translations || {})[locale] || {}, "media");
   const mediaUrls = (() => {
-    if (hasLocaleMedia) {
-      const m = editingTr.media;
-      if (Array.isArray(m)) return m.filter((u) => u != null && String(u).trim() !== "");
-      return [];
-    }
-    const m = meta.media;
-    if (Array.isArray(m)) return m.filter((u) => u != null && String(u).trim() !== "");
-    if (m != null && String(m).trim() !== "") return [String(m)];
-    return [];
+    if (hasLocaleMedia) return coerceProductMediaList(editingTr.media);
+    return coerceProductMediaList(meta.media);
   })();
   const collectionIds = Array.isArray(meta.collection_ids) ? meta.collection_ids : (meta.collection_id != null ? [meta.collection_id] : (product?.collection_id != null ? [product.collection_id] : []));
   const relatedProductIds = Array.isArray(meta.related_product_ids) ? meta.related_product_ids : [];
@@ -2469,7 +2558,7 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                   <Select label={pe.status} labelHidden options={statusOptionsFor(locale)} value={product.status || "draft"} onChange={(v) => update({ status: v })} />
                 </Box>
               </InlineStack>
-              <TextField label="Title" labelHidden value={editingTitle} onChange={(v) => updateLocaleField("title", v)} placeholder="e.g. Cotton T-Shirt" autoComplete="off" />
+              <TextField label="Title" labelHidden value={editingTitle} onChange={(v) => updateLocaleField("title", v)} placeholder="e.g. Cotton T-Shirt" autoComplete="off" helpText={pe.titleHelp} />
 
               <ProductSectionRule />
               <InlineStack gap="300" wrap>
@@ -2566,8 +2655,16 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                               value={getMeta(product, "category_id")}
                               onChange={updateCategoryWithParents}
                               placeholder={locale === "en" ? "Select category" : locale === "tr" ? "Kategori seç" : locale === "fr" ? "Choisir une catégorie" : locale === "es" ? "Seleccionar categoría" : locale === "it" ? "Seleziona categoria" : "Kategorie wählen"}
+                              disabled={categoryLocked}
                             />
                           </Box>
+                          {categoryLocked && (
+                            <Box paddingBlockStart="100">
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {locale === "en" ? "The category can't be changed after the product has been created (it determines which legal fields apply)." : locale === "tr" ? "Ürün oluşturulduktan sonra kategori değiştirilemez (hangi yasal alanların uygulanacağını belirler)." : locale === "fr" ? "La catégorie ne peut plus être modifiée une fois le produit créé (elle détermine les champs légaux applicables)." : locale === "es" ? "La categoría no se puede cambiar después de crear el producto (determina los campos legales aplicables)." : locale === "it" ? "La categoria non può essere modificata dopo la creazione del prodotto (determina i campi legali applicabili)." : "Die Kategorie kann nach dem Anlegen des Produkts nicht mehr geändert werden (sie bestimmt, welche rechtlichen Felder gelten)."}
+                              </Text>
+                            </Box>
+                          )}
                         </Box>
                         <Box minWidth="240px" flex="1">
                           <Select
@@ -2775,7 +2872,7 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                     onDrop={(e) => handleMediaDrop(e, i)}
                     onDragEnd={handleMediaDragEnd}
                   >
-                    <img src={url.startsWith("http") || url.startsWith("data:") ? url : `${baseUrl}${url}`} alt="" />
+                    <img src={resolveMediaUrl(url)} alt="" referrerPolicy="no-referrer" />
                     <button type="button" className="product-media-remove" onClick={() => removeMedia(i)} aria-label="Remove image">×</button>
                     {mediaUrls.length > 1 && <span className="product-media-drag-hint">⠿ {locale === "en" ? "Drag" : locale === "tr" ? "Sürükle" : locale === "fr" ? "Glisser" : locale === "es" ? "Arrastrar" : locale === "it" ? "Trascina" : "Ziehen"}</span>}
                   </div>
@@ -2969,7 +3066,9 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                     <input
                       value={
                         locale === "de"
-                          ? ((product.handle || "").trim() || titleToHandle(editingTitle || product.title || ""))
+                          ? (isPlaceholderHandle(product.handle)
+                            ? (titleToHandle(editingTitle || product.title || "") || "")
+                            : ((product.handle || "").trim() || titleToHandle(editingTitle || product.title || "")))
                           : ((editingTr.handle || "").trim())
                       }
                       onChange={(e) => {
@@ -3879,6 +3978,94 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
               </Modal>
             </div>
           </Card>
+
+          <Card>
+            <div className="product-edit-sections">
+            <BlockStack gap="400">
+              <ProductSectionHeading>{pe.madeInEurope} ({locale === "en" ? "optional" : locale === "tr" ? "isteğe bağlı" : locale === "fr" ? "optionnel" : locale === "es" ? "opcional" : locale === "it" ? "opzionale" : "optional"})</ProductSectionHeading>
+              <Text as="p" tone="subdued">
+                {locale === "en" ? "Registry ID and proof document are optional. After saving with changed details: status \"pending\". The badge appears in the shop only when status is \"verified\" (superuser or later registry check)." : locale === "tr" ? "Registry ID ve kanıt belgesi isteğe bağlıdır. Değiştirilen bilgilerle kaydedildikten sonra: durum \"beklemede\". Mağazada rozet yalnızca durum \"doğrulandı\" olduğunda görünür (süper kullanıcı veya sonraki registry kontrolü)." : locale === "fr" ? "L'ID de registre et le document justificatif sont optionnels. Après enregistrement avec des informations modifiées : statut \"en attente\". Le badge n'apparaît dans la boutique qu'avec le statut \"vérifié\" (superuser ou vérification ultérieure du registre)." : locale === "es" ? "El ID de registro y el documento de prueba son opcionales. Tras guardar con datos modificados: estado \"pendiente\". El badge aparece en la tienda solo con estado \"verificado\" (superusuario o verificación posterior del registro)." : locale === "it" ? "L'ID registro e il documento di prova sono opzionali. Dopo il salvataggio con dati modificati: stato \"in sospeso\". Il badge appare nel negozio solo quando lo stato è \"verificato\" (superuser o controllo registro successivo)." : 'Registry-ID und Nachweisdokument optional. Nach Speichern mit geänderten Angaben: Status „pending". Im Shop erscheint das Badge nur bei Status „verified" (Superuser oder spätere Registry-Prüfung).'}
+              </Text>
+              {euOriginNotice ? (
+                <Banner tone="info" onDismiss={() => setEuOriginNotice("")}>{euOriginNotice}</Banner>
+              ) : null}
+              <TextField
+                label={
+                  <InlineStack gap="200" blockAlign="center" wrap={false}>
+                    <span>{locale === "en" ? "Country of origin (EU)" : locale === "tr" ? "Menşe ülke (AB)" : locale === "fr" ? "Pays d'origine (UE)" : locale === "es" ? "País de origen (UE)" : locale === "it" ? "Paese di origine (UE)" : "Herkunftsland (EU)"}</span>
+                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_country" />
+                  </InlineStack>
+                }
+                value={meta.eu_origin_country ?? ""}
+                onChange={(v) => updateMeta("eu_origin_country", v || undefined)}
+                placeholder={locale === "en" ? "e.g. DE, FR, IT" : locale === "tr" ? "örn. DE, FR, IT" : "z. B. DE, FR, IT"}
+                autoComplete="off"
+              />
+              <TextField
+                label={
+                  <InlineStack gap="200" blockAlign="center" wrap={false}>
+                    <span>Registry-ID</span>
+                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_registry_id" />
+                  </InlineStack>
+                }
+                value={meta.eu_origin_registry_id ?? ""}
+                onChange={(v) => updateMeta("eu_origin_registry_id", v || undefined)}
+                placeholder={locale === "en" ? "EU registry / certificate number" : locale === "tr" ? "AB kayıt / sertifika numarası" : locale === "fr" ? "Registre UE / numéro de certificat" : locale === "es" ? "Registro UE / número de certificado" : locale === "it" ? "Registro UE / numero di certificato" : "EU-Registry / Zertifikatsnummer"}
+                autoComplete="off"
+              />
+              <TextField
+                label={
+                  <InlineStack gap="200" blockAlign="center" wrap={false}>
+                    <span>{pe.proofDocument}</span>
+                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_document_url" />
+                  </InlineStack>
+                }
+                value={meta.eu_origin_document_url ?? ""}
+                onChange={(v) => updateMeta("eu_origin_document_url", v || undefined)}
+                placeholder="https://…"
+                autoComplete="off"
+              />
+              <Select
+                label={locale === "en" ? "Registry provider" : locale === "tr" ? "Registry sağlayıcısı" : locale === "fr" ? "Fournisseur de registre" : locale === "es" ? "Proveedor de registro" : locale === "it" ? "Provider registro" : "Registry-Provider"}
+                options={[
+                  { label: locale === "en" ? "Stub (manual check)" : locale === "tr" ? "Stub (manuel kontrol)" : locale === "fr" ? "Stub (vérification manuelle)" : locale === "es" ? "Stub (verificación manual)" : locale === "it" ? "Stub (verifica manuale)" : "Stub (manuelle Prüfung)", value: "stub" },
+                ]}
+                value={meta.eu_origin_provider || "stub"}
+                onChange={(v) => updateMeta("eu_origin_provider", v || "stub")}
+              />
+              <TextField
+                label="Status"
+                value={meta.eu_origin_status || "—"}
+                readOnly
+                autoComplete="off"
+                helpText={
+                  meta.eu_origin_verified_at
+                    ? `${locale === "en" ? "Verified at:" : locale === "tr" ? "Doğrulandı:" : locale === "fr" ? "Vérifié le :" : locale === "es" ? "Verificado el:" : locale === "it" ? "Verificato il:" : "Verifiziert am:"} ${meta.eu_origin_verified_at}`
+                    : undefined
+                }
+              />
+              <InlineStack gap="200">
+                <Button
+                  onClick={() => handleVerifyEuOrigin(false)}
+                  loading={euOriginVerifying}
+                  disabled={!product?.id || euOriginVerifying}
+                >
+                  {locale === "en" ? "Check registry (stub)" : locale === "tr" ? "Registry kontrol et (stub)" : locale === "fr" ? "Vérifier le registre (stub)" : locale === "es" ? "Verificar registro (stub)" : locale === "it" ? "Controlla registro (stub)" : "Registry prüfen (Stub)"}
+                </Button>
+                {isSuperuser ? (
+                  <Button
+                    variant="primary"
+                    onClick={() => handleVerifyEuOrigin(true)}
+                    loading={euOriginVerifying}
+                    disabled={!product?.id || euOriginVerifying}
+                  >
+                    {locale === "en" ? "Verify manually" : locale === "tr" ? "Manuel doğrula" : locale === "fr" ? "Vérifier manuellement" : locale === "es" ? "Verificar manualmente" : locale === "it" ? "Verifica manualmente" : "Manuell verifizieren"}
+                  </Button>
+                ) : null}
+              </InlineStack>
+            </BlockStack>
+            </div>
+          </Card>
           </BlockStack>
         </Layout.Section>
       </Layout>
@@ -3984,94 +4171,6 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                 getMeta={getMeta}
                 updateMeta={updateMeta}
               />
-            </BlockStack>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="product-edit-sections">
-            <BlockStack gap="400">
-              <ProductSectionHeading>{pe.madeInEurope} ({locale === "en" ? "optional" : locale === "tr" ? "isteğe bağlı" : locale === "fr" ? "optionnel" : locale === "es" ? "opcional" : locale === "it" ? "opzionale" : "optional"})</ProductSectionHeading>
-              <Text as="p" tone="subdued">
-                {locale === "en" ? "Registry ID and proof document are optional. After saving with changed details: status \"pending\". The badge appears in the shop only when status is \"verified\" (superuser or later registry check)." : locale === "tr" ? "Registry ID ve kanıt belgesi isteğe bağlıdır. Değiştirilen bilgilerle kaydedildikten sonra: durum \"beklemede\". Mağazada rozet yalnızca durum \"doğrulandı\" olduğunda görünür (süper kullanıcı veya sonraki registry kontrolü)." : locale === "fr" ? "L'ID de registre et le document justificatif sont optionnels. Après enregistrement avec des informations modifiées : statut \"en attente\". Le badge n'apparaît dans la boutique qu'avec le statut \"vérifié\" (superuser ou vérification ultérieure du registre)." : locale === "es" ? "El ID de registro y el documento de prueba son opcionales. Tras guardar con datos modificados: estado \"pendiente\". El badge aparece en la tienda solo con estado \"verificado\" (superusuario o verificación posterior del registro)." : locale === "it" ? "L'ID registro e il documento di prova sono opzionali. Dopo il salvataggio con dati modificati: stato \"in sospeso\". Il badge appare nel negozio solo quando lo stato è \"verificato\" (superuser o controllo registro successivo)." : 'Registry-ID und Nachweisdokument optional. Nach Speichern mit geänderten Angaben: Status „pending". Im Shop erscheint das Badge nur bei Status „verified" (Superuser oder spätere Registry-Prüfung).'}
-              </Text>
-              {euOriginNotice ? (
-                <Banner tone="info" onDismiss={() => setEuOriginNotice("")}>{euOriginNotice}</Banner>
-              ) : null}
-              <TextField
-                label={
-                  <InlineStack gap="200" blockAlign="center" wrap={false}>
-                    <span>{locale === "en" ? "Country of origin (EU)" : locale === "tr" ? "Menşe ülke (AB)" : locale === "fr" ? "Pays d'origine (UE)" : locale === "es" ? "País de origen (UE)" : locale === "it" ? "Paese di origine (UE)" : "Herkunftsland (EU)"}</span>
-                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_country" />
-                  </InlineStack>
-                }
-                value={meta.eu_origin_country ?? ""}
-                onChange={(v) => updateMeta("eu_origin_country", v || undefined)}
-                placeholder={locale === "en" ? "e.g. DE, FR, IT" : locale === "tr" ? "örn. DE, FR, IT" : "z. B. DE, FR, IT"}
-                autoComplete="off"
-              />
-              <TextField
-                label={
-                  <InlineStack gap="200" blockAlign="center" wrap={false}>
-                    <span>Registry-ID</span>
-                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_registry_id" />
-                  </InlineStack>
-                }
-                value={meta.eu_origin_registry_id ?? ""}
-                onChange={(v) => updateMeta("eu_origin_registry_id", v || undefined)}
-                placeholder={locale === "en" ? "EU registry / certificate number" : locale === "tr" ? "AB kayıt / sertifika numarası" : locale === "fr" ? "Registre UE / numéro de certificat" : locale === "es" ? "Registro UE / número de certificado" : locale === "it" ? "Registro UE / numero di certificato" : "EU-Registry / Zertifikatsnummer"}
-                autoComplete="off"
-              />
-              <TextField
-                label={
-                  <InlineStack gap="200" blockAlign="center" wrap={false}>
-                    <span>{pe.proofDocument}</span>
-                    <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName="metadata.eu_origin_document_url" />
-                  </InlineStack>
-                }
-                value={meta.eu_origin_document_url ?? ""}
-                onChange={(v) => updateMeta("eu_origin_document_url", v || undefined)}
-                placeholder="https://…"
-                autoComplete="off"
-              />
-              <Select
-                label={locale === "en" ? "Registry provider" : locale === "tr" ? "Registry sağlayıcısı" : locale === "fr" ? "Fournisseur de registre" : locale === "es" ? "Proveedor de registro" : locale === "it" ? "Provider registro" : "Registry-Provider"}
-                options={[
-                  { label: locale === "en" ? "Stub (manual check)" : locale === "tr" ? "Stub (manuel kontrol)" : locale === "fr" ? "Stub (vérification manuelle)" : locale === "es" ? "Stub (verificación manual)" : locale === "it" ? "Stub (verifica manuale)" : "Stub (manuelle Prüfung)", value: "stub" },
-                ]}
-                value={meta.eu_origin_provider || "stub"}
-                onChange={(v) => updateMeta("eu_origin_provider", v || "stub")}
-              />
-              <TextField
-                label="Status"
-                value={meta.eu_origin_status || "—"}
-                readOnly
-                autoComplete="off"
-                helpText={
-                  meta.eu_origin_verified_at
-                    ? `${locale === "en" ? "Verified at:" : locale === "tr" ? "Doğrulandı:" : locale === "fr" ? "Vérifié le :" : locale === "es" ? "Verificado el:" : locale === "it" ? "Verificato il:" : "Verifiziert am:"} ${meta.eu_origin_verified_at}`
-                    : undefined
-                }
-              />
-              <InlineStack gap="200">
-                <Button
-                  onClick={() => handleVerifyEuOrigin(false)}
-                  loading={euOriginVerifying}
-                  disabled={!product?.id || euOriginVerifying}
-                >
-                  {locale === "en" ? "Check registry (stub)" : locale === "tr" ? "Registry kontrol et (stub)" : locale === "fr" ? "Vérifier le registre (stub)" : locale === "es" ? "Verificar registro (stub)" : locale === "it" ? "Controlla registro (stub)" : "Registry prüfen (Stub)"}
-                </Button>
-                {isSuperuser ? (
-                  <Button
-                    variant="primary"
-                    onClick={() => handleVerifyEuOrigin(true)}
-                    loading={euOriginVerifying}
-                    disabled={!product?.id || euOriginVerifying}
-                  >
-                    {locale === "en" ? "Verify manually" : locale === "tr" ? "Manuel doğrula" : locale === "fr" ? "Vérifier manuellement" : locale === "es" ? "Verificar manualmente" : locale === "it" ? "Verifica manualmente" : "Manuell verifizieren"}
-                  </Button>
-                ) : null}
-              </InlineStack>
             </BlockStack>
             </div>
           </Card>

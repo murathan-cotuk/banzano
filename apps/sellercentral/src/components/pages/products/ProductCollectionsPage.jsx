@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import {
   Page,
   Layout,

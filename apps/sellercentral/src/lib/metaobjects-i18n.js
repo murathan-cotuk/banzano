@@ -1,13 +1,33 @@
 import { lt } from "@/lib/locale-text";
 
 export const METAOBJECT_LANGS = [
-  { code: "de", name: "German" },
   { code: "en", name: "English" },
-  { code: "fr", name: "French" },
-  { code: "es", name: "Spanish" },
-  { code: "it", name: "Italian" },
+  { code: "de", name: "German" },
   { code: "tr", name: "Turkish" },
+  { code: "fr", name: "French" },
+  { code: "it", name: "Italian" },
+  { code: "es", name: "Spanish" },
 ];
+
+export function localizedMetaobjectLabel(def, lang) {
+  const loc = String(lang || "de").slice(0, 2).toLowerCase();
+  if (loc && loc !== "de") {
+    const t = def?.label_i18n?.[loc]?.label;
+    if (t != null && String(t).trim()) return String(t).trim();
+  }
+  return String(def?.label || "").trim();
+}
+
+export function localizedMetaobjectValue(def, canonical, lang) {
+  const loc = String(lang || "de").slice(0, 2).toLowerCase();
+  const raw = canonical == null ? "" : String(canonical);
+  if (loc && loc !== "de") {
+    const map = def?.values_i18n?.[loc];
+    const t = map && typeof map === "object" ? (map[raw] ?? map[raw.trim()]) : null;
+    if (t != null && String(t).trim()) return String(t).trim();
+  }
+  return raw;
+}
 
 export function slugifyMetaKey(raw) {
   return String(raw || "")
@@ -123,16 +143,16 @@ export function getMetaobjectsCopy(locale) {
     importBtn: t("Import metaobjects", "Metaobject içe aktar", "Importer des méta-objets", "Importar metaobjetos", "Importa meta oggetti", "Metaobjekte importieren"),
     importTitle: t("Import metaobjects", "Metaobject içe aktar", "Importer des méta-objets", "Importar metaobjetos", "Importa meta oggetti", "Metaobjekte importieren"),
     importHelp: t(
-      "Download the Excel template, fill Title + Value for each language, then upload. Existing titles receive new values (nothing is deleted). New titles are created.",
-      "Excel şablonunu indirin, her dil için Title + Value doldurun, sonra yükleyin. Mevcut başlıklara yeni değerler eklenir (silinmez). Yeni başlıklar oluşturulur.",
-      "Téléchargez le modèle, remplissez Title + Value par langue, puis importez. Les titres existants reçoivent de nouvelles valeurs (rien n’est supprimé).",
-      "Descarga la plantilla, rellena Title + Value por idioma e importa. Los títulos existentes reciben valores nuevos (no se borra nada).",
-      "Scarica il modello, compila Title + Value per lingua e importa. I titoli esistenti ricevono nuovi valori (niente viene cancellato).",
-      "Vorlage herunterladen, Title + Value je Sprache ausfüllen und hochladen. Vorhandene Titel erhalten neue Werte (nichts wird gelöscht). Neue Titel werden angelegt.",
+      "Column order is always English, German, Turkish, French, Italian, Spanish. Each language has 2 columns: Title then Value. Existing titles receive new values (nothing is deleted). New titles are created.",
+      "Sütun sırası her zaman İngilizce, Almanca, Türkçe, Fransızca, İtalyanca, İspanyolca. Her dilin 2 sütunu var: Title sonra Value. Mevcut başlıklara yeni değerler eklenir (silinmez).",
+      "Ordre des colonnes : anglais, allemand, turc, français, italien, espagnol. 2 colonnes par langue : Title puis Value.",
+      "Orden de columnas: inglés, alemán, turco, francés, italiano, español. 2 columnas por idioma: Title y Value.",
+      "Ordine colonne: inglese, tedesco, turco, francese, italiano, spagnolo. 2 colonne per lingua: Title poi Value.",
+      "Spaltenreihenfolge immer: Englisch, Deutsch, Türkisch, Französisch, Italienisch, Spanisch. Pro Sprache 2 Spalten: Title, dann Value. Vorhandene Titel erhalten neue Werte (nichts wird gelöscht).",
     ),
     downloadTemplate: t("Download .xlsx template", ".xlsx şablonunu indir", "Télécharger le modèle .xlsx", "Descargar plantilla .xlsx", "Scarica modello .xlsx", ".xlsx-Vorlage herunterladen"),
     dropLabel: t("Drop your .xlsx here or click to select", "xlsx dosyasını buraya bırakın veya seçin", "Déposez le .xlsx ici ou cliquez pour choisir", "Suelta el .xlsx aquí o haz clic para elegir", "Trascina il .xlsx qui o clicca per scegliere", ".xlsx hierher ziehen oder zum Auswählen klicken"),
-    dropHint: t(".xlsx • Title + Value per language", ".xlsx • Dil başına Title + Value", ".xlsx • Title + Value par langue", ".xlsx • Title + Value por idioma", ".xlsx • Title + Value per lingua", ".xlsx • Title + Value je Sprache"),
+    dropHint: t(".xlsx • EN DE TR FR IT ES • Title + Value each", ".xlsx • EN DE TR FR IT ES • her dil Title + Value", ".xlsx • EN DE TR FR IT ES • Title + Value", ".xlsx • EN DE TR FR IT ES • Title + Value", ".xlsx • EN DE TR FR IT ES • Title + Value", ".xlsx • EN DE TR FR IT ES • Title + Value je Sprache"),
     importAction: t("Import", "İçe aktar", "Importer", "Importar", "Importa", "Importieren"),
     importing: t("Importing…", "İçe aktarılıyor…", "Import…", "Importando…", "Importazione…", "Importiere…"),
     importOk: (created, updated, valuesAdded) => t(

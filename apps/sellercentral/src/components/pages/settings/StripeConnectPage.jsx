@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { Banner, BlockStack, Box, Button, Card, InlineStack, Text } from "@shopify/polaris";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { getUI } from "@/lib/ui-strings";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Text, TextField } from "@shopify/polaris";
 import { useLocale } from "next-intl";
 import { categoryDisplayName } from "@/lib/category-locale";
@@ -40,10 +41,12 @@ export default function CategoryDrilldownSelect({
   onChange,
   placeholder = "Select category",
   noneLabel = "— None —",
+  disabled = false,
 }) {
   const locale = useLocale();
   const wrapperRef = useRef(null);
   const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const [triggerRect, setTriggerRect] = useState(null);
@@ -146,7 +149,9 @@ export default function CategoryDrilldownSelect({
 
   useEffect(() => {
     const onDown = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+      if (wrapperRef.current && wrapperRef.current.contains(e.target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -171,18 +176,19 @@ export default function CategoryDrilldownSelect({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
         style={{
           width: "100%",
           minHeight: 36,
           border: "1px solid var(--p-color-border)",
           borderRadius: 8,
-          background: "var(--p-color-bg-surface)",
+          background: disabled ? "var(--p-color-bg-surface-disabled, #f1f2f4)" : "var(--p-color-bg-surface)",
           textAlign: "left",
           padding: "8px 12px",
           fontSize: 14,
           color: "var(--p-color-text)",
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
         aria-label={label}
       >
@@ -192,8 +198,9 @@ export default function CategoryDrilldownSelect({
         <span style={{ float: "right", color: "var(--p-color-text-subdued)" }}>{open ? "▴" : "▾"}</span>
       </button>
 
-      {open && triggerRect && (
+      {open && !disabled && triggerRect && typeof document !== "undefined" && createPortal(
         <div
+          ref={dropdownRef}
           style={{
             position: "fixed",
             ...(openUpward
@@ -303,7 +310,8 @@ export default function CategoryDrilldownSelect({
               <div style={{ padding: "8px 10px", fontSize: 12, color: "#9ca3af" }}>No child category in this level.</div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

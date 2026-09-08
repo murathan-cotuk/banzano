@@ -397,6 +397,7 @@ export default function MediaPickerModal({
                       <img
                         src={url}
                         alt={item.alt || item.filename || ""}
+                        referrerPolicy="no-referrer"
                         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       />
                     )}

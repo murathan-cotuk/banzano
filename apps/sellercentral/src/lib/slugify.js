@@ -13,6 +13,13 @@ const CHAR_MAP = {
   ß: "ss", æ: "ae", Æ: "ae", ø: "oe", Ø: "oe", å: "a", Å: "a",
 };
 
+const PLACEHOLDER_HANDLE_RE = /^(untitled|unbenannt|product|produkt)$/i;
+
+export function isPlaceholderHandle(value) {
+  const t = String(value || "").trim();
+  return !t || PLACEHOLDER_HANDLE_RE.test(t);
+}
+
 function transliterate(s) {
   let out = s;
   for (const [from, to] of Object.entries(CHAR_MAP)) {

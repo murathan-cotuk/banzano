@@ -2,8 +2,11 @@
   "nav": {
     "dashboard": "Dashboard",
     "links": "Link",
+    "referrals": "Referral",
     "reports": "Report",
+    "payouts": "Pagamenti",
     "resources": "Risorse",
+    "settings": "Impostazioni",
     "terms": "Termini",
     "logout": "Esci"
   },
@@ -30,7 +33,10 @@
     "requiredFields": "Nome, e-mail e password sono obbligatori.",
     "requiredCountry": "Il paese è obbligatorio.",
     "passwordTooShort": "La password deve contenere almeno 8 caratteri.",
-    "mustAgree": "Devi accettare i termini per registrarti."
+    "mustAgree": "Devi accettare i termini per registrarti.",
+    "viewTerms": "Visualizza i termini di affiliazione",
+    "viewPrivacy": "Visualizza l'informativa sulla privacy",
+    "selectCountry": "Seleziona il paese"
   },
   "dashboard": {
     "title": "Monitora link, click e commissioni",

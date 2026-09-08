@@ -46,21 +46,12 @@ import { storeCategoriesQuery } from "@/lib/store-categories-url";
 import { cachedJsonFetch } from "@/lib/browser-fetch-cache";
 import { extractSolidTintFromChromeCss } from "@/lib/header-status-tint";
 import { applyDocumentFavicon } from "@/lib/apply-document-favicon";
-import { getLocalizedCategory } from "@/lib/format";
 import { resolveImageUrl } from "@/lib/image-url";
+import { pickCategoryListImageRaw } from "@/lib/category-list-image";
+import { findCategoryNodeById, mapCategoryNodesToMenuRows, shouldCategoryMenuDrill } from "@/lib/category-menu-rows";
 
 /** Yukarı kaydırırken titreşimi süzmek için (alt menüyü tekrar göster) */
 const SCROLL_UP_DELTA = 6;
-
-/** Seller "Category image" (metadata.image_url) + banner fallback — same as MobileNav */
-function categoryListImageUrl(node) {
-  if (!node) return "";
-  const meta = node.metadata && typeof node.metadata === "object" ? node.metadata : {};
-  const a = meta.image_url || meta.imageUrl;
-  const b = node.banner_image_url || meta.banner_image_url;
-  const raw = a || b || "";
-  return String(raw).trim();
-}
 
 function backdropBlurFromToken(raw) {
   const s = String(raw ?? "").trim();
@@ -696,16 +687,18 @@ const CategoryMegaLinkLabel = styled.span`
 `;
 
 const CategoryMegaBtnLink = styled.button`
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   text-align: left;
-  padding: 7px 12px;
+  padding: 10px 14px;
   font-size: 13.5px;
   font-family: ${tokens.fontFamily.sans};
+  font-weight: 600;
   color: ${tokens.dark[700]};
   text-decoration: none;
-  border-radius: 6px;
-  white-space: nowrap;
+  border-radius: 8px;
   background: none;
   border: none;
   cursor: pointer;
@@ -1031,7 +1024,7 @@ export default function ShopHeader() {
   const [categorySlugToId, setCategorySlugToId] = useState(() => new Map());
   const [categoriesFetchDone, setCategoriesFetchDone] = useState(false);
   const [categoryTree, setCategoryTree] = useState([]);
-  const [drillCategoryId, setDrillCategoryId] = useState(null); // null = root level
+  const [categoryDrillStack, setCategoryDrillStack] = useState([]); // [] = root level
   const { isAuthenticated, user, logout } = useAuth();
   const { openCartSidebar, itemCount, shippingGroups } = useCart();
   const tLocale = useTranslations("locale");
@@ -1208,8 +1201,8 @@ export default function ShopHeader() {
       setSecondMenuItems(second ? rootItems(second.items) : []);
     };
     Promise.all([
-      cachedJsonFetch("/api/store-menu-locations", { ttlMs: 300000 }).catch(() => ({ locations: [] })),
-      cachedJsonFetch(`/api/store-menus?locale=${encodeURIComponent(locale)}`, { ttlMs: 60000 }).catch(() => ({ menus: [] })),
+      cachedJsonFetch("/api/store-menu-locations", { ttlMs: 15000 }).catch(() => ({ locations: [] })),
+      cachedJsonFetch(`/api/store-menus?locale=${encodeURIComponent(locale)}`, { ttlMs: 15000 }).catch(() => ({ menus: [] })),
     ]).then(([locData, menuData]) => {
       const hasMenus = Array.isArray(menuData?.menus) && menuData.menus.length > 0;
       if (hasMenus) {
@@ -1226,7 +1219,7 @@ export default function ShopHeader() {
 
   useEffect(() => {
     let cancelled = false;
-    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 })
       .catch(() => ({ tree: [] }))
       .then((catRes) => {
         if (cancelled) return;
@@ -1320,7 +1313,7 @@ export default function ShopHeader() {
   }, []);
 
   useEffect(() => {
-    setDrillCategoryId(null);
+    setCategoryDrillStack([]);
     setMainMenuOpen(false);
     setLocaleDropdownOpen(false);
     setScrollingDown(false);
@@ -1433,26 +1426,18 @@ export default function ShopHeader() {
     url: "handle",
     image: "thumbnail",
   };
-  /** Tüm root kategoriler — ürünü olan (has_products=true) kategoriler gösterilir. */
-  const browseRootsFromTree = useMemo(() => {
-    if (!Array.isArray(categoryTree) || categoryTree.length === 0) return [];
-    return categoryTree
-      .filter((n) => n && !n.parent_id && n.has_products !== false)
-      .map((n) => {
-        const imageRaw = categoryListImageUrl(n);
-        return {
-          key: String(n.id),
-          id: String(n.id),
-          label: getLocalizedCategory(n, locale).name || n.slug || "",
-          slug: String(n.slug || n.handle || "").replace(/^\//, "").trim(),
-          hasChildren: Array.isArray(n.children) && n.children.some((c) => c && c.has_products !== false),
-          imageUrl: imageRaw ? resolveImageUrl(imageRaw) : "",
-          node: n,
-        };
-      })
-      .filter((r) => r.slug)
-      .sort((a, b) => String(a.label).localeCompare(String(b.label), locale));
-  }, [categoryTree, locale]);
+  /** Tree payload is already roots with product-bearing children nested. */
+  const categoryPanelRows = useMemo(
+    () => mapCategoryNodesToMenuRows(categoryTree, locale).map((r) => ({ ...r, href: `/${r.slug}` })),
+    [categoryTree, locale],
+  );
+  const categoryDrillParent = categoryDrillStack.length
+    ? findCategoryNodeById(categoryTree, categoryDrillStack[categoryDrillStack.length - 1].id)
+    : null;
+  const categoryDrillRows = useMemo(
+    () => mapCategoryNodesToMenuRows(categoryDrillParent?.children || [], locale).map((r) => ({ ...r, href: `/${r.slug}` })),
+    [categoryDrillParent, locale],
+  );
 
   /** slug/id → category image for menu-item fallback rows */
   const categoryImageByRef = useMemo(() => {
@@ -1461,7 +1446,7 @@ export default function ShopHeader() {
       if (!Array.isArray(nodes)) return;
       for (const n of nodes) {
         if (!n) continue;
-        const imageRaw = categoryListImageUrl(n);
+        const imageRaw = pickCategoryListImageRaw(n);
         const imageUrl = imageRaw ? resolveImageUrl(imageRaw) : "";
         if (imageUrl) {
           const slug = String(n.slug || n.handle || "").trim().toLowerCase();
@@ -1475,41 +1460,6 @@ export default function ShopHeader() {
     walk(categoryTree);
     return map;
   }, [categoryTree]);
-
-  // Children of the currently drilled category
-  const drillRows = useMemo(() => {
-    if (!drillCategoryId) return [];
-    const findNode = (nodes, id) => {
-      for (const n of (nodes || [])) {
-        if (String(n.id) === String(id)) return n;
-        const found = findNode(n.children, id);
-        if (found) return found;
-      }
-      return null;
-    };
-    const parent = findNode(categoryTree, drillCategoryId);
-    if (!parent || !Array.isArray(parent.children)) return [];
-    return parent.children
-      .filter((n) => n && n.has_products !== false)
-      .map((n) => ({
-        key: String(n.id),
-        id: String(n.id),
-        label: getLocalizedCategory(n, locale).name || n.slug || "",
-        slug: String(n.slug || n.handle || "").replace(/^\//, "").trim(),
-        hasChildren: Array.isArray(n.children) && n.children.some((c) => c && c.has_products !== false),
-      }))
-      .filter((r) => r.slug)
-      .sort((a, b) => String(a.label).localeCompare(String(b.label), locale));
-  }, [drillCategoryId, categoryTree, locale]);
-
-  const categoryPanelRows = browseRootsFromTree.map((r) => ({
-    key: r.key,
-    id: r.id,
-    label: r.label,
-    href: `/${r.slug}`,
-    hasChildren: r.hasChildren,
-    imageUrl: r.imageUrl || "",
-  }));
 
   // Root-level menu items (no parent) for direct link rendering
   const menuPanelItems = useMemo(
@@ -1533,7 +1483,7 @@ export default function ShopHeader() {
   );
   const showCategoriesMode = Boolean(mainMenuConfig?.categories_with_products);
   /** categories_with_products modunda ağaç doluysa panel ağacı kullanır; ağaç boşsa menü satırlarına düş */
-  const categoryTreeNavReady = browseRootsFromTree.length > 0;
+  const categoryTreeNavReady = categoryPanelRows.length > 0;
   const useCategoryTreeForPanel = showCategoriesMode && categoryTreeNavReady;
 
   /** Panel tamamen boş kalmasın: kök menü öğeleri (filtre yok) yedek */
@@ -1718,7 +1668,7 @@ export default function ShopHeader() {
                     onClick={() => {
                       setLocaleDropdownOpen(false);
                       setHoveredMenuItemId(null);
-                      setDrillCategoryId(null);
+                      setCategoryDrillStack([]);
                       setMainMenuOpen((v) => !v);
                     }}
                     aria-expanded={mainMenuOpen}
@@ -1931,7 +1881,10 @@ export default function ShopHeader() {
                 <CategoryMegaBackdrop
                   $open={mainMenuOpen}
                   aria-hidden={!mainMenuOpen}
-                  onClick={() => setMainMenuOpen(false)}
+                  onClick={() => {
+                    setMainMenuOpen(false);
+                    setCategoryDrillStack([]);
+                  }}
                 />
               ) : null}
               <CategoryMegaPanel
@@ -1940,16 +1893,26 @@ export default function ShopHeader() {
                 data-categories-dropdown
                 onClick={(e) => {
                   if (!isNarrowViewport) return;
-                  if (e.target === e.currentTarget) setMainMenuOpen(false);
+                  if (e.target === e.currentTarget) {
+                    setMainMenuOpen(false);
+                    setCategoryDrillStack([]);
+                  }
                 }}
               >
                 {!isNarrowViewport ? (
                   <CategoryMegaSidebarHead>
-                    <span>{tCommon("categories")}</span>
+                    <span>
+                      {useCategoryTreeForPanel && categoryDrillStack.length
+                        ? categoryDrillStack[categoryDrillStack.length - 1].label
+                        : tCommon("categories")}
+                    </span>
                     <CategoryMegaSidebarClose
                       type="button"
                       aria-label={tAccountPanel("close")}
-                      onClick={() => setMainMenuOpen(false)}
+                      onClick={() => {
+                        setMainMenuOpen(false);
+                        setCategoryDrillStack([]);
+                      }}
                     >
                       ×
                     </CategoryMegaSidebarClose>
@@ -1963,6 +1926,11 @@ export default function ShopHeader() {
                       return categoryImageByRef.get(ref) || categoryImageByRef.get(String(item.link_value || "").trim().toLowerCase()) || "";
                     };
 
+                    const treeLevelRows = categoryDrillStack.length > 0 ? categoryDrillRows : categoryPanelRows;
+                    const drillCurrent = categoryDrillStack.length > 0
+                      ? categoryDrillStack[categoryDrillStack.length - 1]
+                      : null;
+
                     const primaryRows =
                       !useCategoryTreeForPanel && menuPanelItems.length > 0
                         ? menuPanelItems.map((item) => ({
@@ -1970,35 +1938,80 @@ export default function ShopHeader() {
                             href: menuItemHref(item),
                             label: item.label,
                             imageUrl: imageForMenuItem(item),
+                            hasChildren: false,
                             onClick: () => {
                               setMainMenuOpen(false);
                             },
                           }))
-                        : categoryPanelRows.map((row) => ({
+                        : treeLevelRows.map((row) => ({
                             key: row.key,
-                            href: row.href || "#",
+                            id: row.id,
+                            href: row.href || `/${row.slug}`,
+                            slug: row.slug,
                             label: row.label,
                             imageUrl: row.imageUrl || "",
-                            onClick: () => {
-                              setMainMenuOpen(false);
-                              setDrillCategoryId(null);
-                            },
+                            hasChildren: !!row.hasChildren,
                           })).filter((r) => r.href && r.href !== "#");
 
                     const rows = primaryRows.length > 0 ? primaryRows : looseMenuPanelRows;
+                    const canDrill = useCategoryTreeForPanel;
 
                     const renderRow = (row) => (
-                      <CategoryMegaLink key={row.key} href={row.href} onClick={row.onClick}>
+                      <CategoryMegaLink
+                        key={row.key}
+                        href={row.href}
+                        onClick={(e) => {
+                          if (canDrill && shouldCategoryMenuDrill(e, row.hasChildren)) {
+                            e.preventDefault();
+                            setCategoryDrillStack((s) => [...s, { id: row.id, label: row.label, slug: row.slug }]);
+                            return;
+                          }
+                          if (row.onClick) row.onClick();
+                          else {
+                            setMainMenuOpen(false);
+                            setCategoryDrillStack([]);
+                          }
+                        }}
+                      >
                         {row.imageUrl ? (
                           <CategoryMegaThumb src={row.imageUrl} alt="" />
                         ) : (
                           <CategoryMegaThumbPlaceholder aria-hidden />
                         )}
                         <CategoryMegaLinkLabel>{row.label}</CategoryMegaLinkLabel>
+                        {canDrill && row.hasChildren ? (
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ flexShrink: 0, opacity: 0.55 }}>
+                            <path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
                       </CategoryMegaLink>
                     );
 
-                    if (rows.length === 0) {
+                    const drillChrome = canDrill && drillCurrent ? (
+                      <>
+                        <CategoryMegaBtnLink
+                          type="button"
+                          onClick={() => setCategoryDrillStack((s) => s.slice(0, -1))}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                            <path d="M7.5 2.5L4 6L7.5 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          {tCommon("back")}
+                        </CategoryMegaBtnLink>
+                        <CategoryMegaLink
+                          href={`/${String(drillCurrent.slug || "").replace(/^\//, "")}`}
+                          onClick={() => {
+                            setMainMenuOpen(false);
+                            setCategoryDrillStack([]);
+                          }}
+                        >
+                          <CategoryMegaThumbPlaceholder aria-hidden />
+                          <CategoryMegaLinkLabel>{drillCurrent.label}</CategoryMegaLinkLabel>
+                        </CategoryMegaLink>
+                      </>
+                    ) : null;
+
+                    if (rows.length === 0 && !drillChrome) {
                       return (
                         <div style={{ padding: "8px 0", color: tokens.dark[500], fontSize: 14 }}>
                           {tNav("categoryMenuEmpty")}
@@ -2007,7 +2020,12 @@ export default function ShopHeader() {
                     }
 
                     if (!isNarrowViewport) {
-                      return rows.map((row) => renderRow(row));
+                      return (
+                        <>
+                          {drillChrome}
+                          {rows.map((row) => renderRow(row))}
+                        </>
+                      );
                     }
 
                     const COLS_MAX = 8;
@@ -2016,11 +2034,16 @@ export default function ShopHeader() {
                       cols.push(rows.slice(i, i + COLS_MAX));
                     }
 
-                    return cols.map((col, ci) => (
-                      <CategoryMegaCol key={ci}>
-                        {col.map((row) => renderRow(row))}
-                      </CategoryMegaCol>
-                    ));
+                    return (
+                      <>
+                        {drillChrome}
+                        {cols.map((col, ci) => (
+                          <CategoryMegaCol key={ci}>
+                            {col.map((row) => renderRow(row))}
+                          </CategoryMegaCol>
+                        ))}
+                      </>
+                    );
                   })()}
                 </CategoryMegaInner>
               </CategoryMegaPanel>

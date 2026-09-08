@@ -1,9 +1,9 @@
 /**
  * Resolve image URL for display.
  *
- * /uploads/ paths (relative or absolute) are returned as relative paths so the
- * shop's own rewrite rule proxies them — users see andertal.com URLs, never the
- * raw api.andertal.com backend.  All other absolute URLs are returned as-is.
+ * Own-backend /uploads/ paths (relative or absolute) are returned as relative
+ * paths so the shop rewrite proxies them. Foreign absolute upload hosts stay
+ * as-is so legacy CDN files still load.
  */
 const BACKEND_URL = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL) || "http://localhost:9000";
 const BASE = (BACKEND_URL || "").replace(/\/$/, "");
@@ -19,6 +19,24 @@ function getPathname(fullUrl) {
   return null;
 }
 
+function isOwnUploadHost(fullUrl) {
+  try {
+    const abs = fullUrl.startsWith("//") ? `https:${fullUrl}` : fullUrl;
+    const host = new URL(abs).hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    let backendHost = "";
+    try {
+      const b = BASE.startsWith("http") ? BASE : `https://${BASE}`;
+      backendHost = new URL(b).hostname.toLowerCase();
+    } catch (_) {}
+    if (backendHost && host === backendHost) return true;
+    if (host === "andertal.com" || host.endsWith(".andertal.com")) return true;
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 export function resolveImageUrl(url) {
   if (!url || typeof url !== "string") return "";
   const u = url.trim();
@@ -30,10 +48,13 @@ export function resolveImageUrl(url) {
     return `${BASE}${u.startsWith("/") ? "" : "/"}${u}`;
   }
 
-  // Absolute URL: if path is /uploads/..., strip the host so shop rewrite handles it
+  // Absolute URL: rewrite /uploads/ to a same-origin path only when the file
+  // lives on this shop's own backend. Foreign hosts (legacy CDNs) must stay
+  // absolute — stripping them made category thumbnails 404.
   const pathname = getPathname(u);
   if (pathname && pathname.startsWith("/uploads/")) {
-    return pathname;
+    if (isOwnUploadHost(u)) return pathname;
+    return u;
   }
   return u;
 }

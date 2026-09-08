@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import NextLink from "next/link";
+import { Link as NextLink } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import styled from "styled-components";
 import { Card, Button } from "@andertal/ui";

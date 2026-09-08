@@ -23,15 +23,26 @@ export function formatPriceCents(cents) {
  */
 const LOCALES = ["de", "en", "tr", "fr", "es", "it"];
 
+/** New products default to this placeholder; it must not block fallback to a real locale title. */
+export function isPlaceholderProductTitle(value) {
+  const t = String(value || "").trim();
+  return !t || /^(untitled|unbenannt)$/i.test(t);
+}
+
 function pickTranslatedField(tr, meta, field, locale, base) {
   const loc = String(locale || "de").slice(0, 2).toLowerCase();
   const fallbackOrder = [loc, "de", "en"];
+  const usable = (fieldName, val) => {
+    if (!val) return false;
+    if (fieldName === "title" && isPlaceholderProductTitle(val)) return false;
+    return true;
+  };
   if (tr) {
     for (const l of fallbackOrder) {
-      if (l && tr[l]?.[field]) return tr[l][field];
+      if (l && usable(field, tr[l]?.[field])) return tr[l][field];
     }
     for (const l of LOCALES) {
-      if (tr[l]?.[field]) return tr[l][field];
+      if (usable(field, tr[l]?.[field])) return tr[l][field];
     }
   }
   const flatKey = `${field}_${loc}`;
@@ -63,15 +74,20 @@ export function getLocalizedProduct(product, locale) {
   const LOCALES = ["de", "en", "tr", "fr", "es", "it"];
 
   function pickField(field, base) {
+    const usable = (val) => {
+      if (!val) return false;
+      if (field === "title" && isPlaceholderProductTitle(val)) return false;
+      return true;
+    };
     if (tr) {
       for (const l of fallbackOrder) {
-        if (l && tr[l]?.[field]) return tr[l][field];
+        if (l && usable(tr[l]?.[field])) return tr[l][field];
       }
       for (const l of LOCALES) {
-        if (tr[l]?.[field]) return tr[l][field];
+        if (usable(tr[l]?.[field])) return tr[l][field];
       }
     }
-    return base ?? "";
+    return usable(base) ? base : (base ?? "");
   }
 
   return {

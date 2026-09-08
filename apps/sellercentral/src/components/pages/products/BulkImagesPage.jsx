@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import styled from "styled-components";
 import { Card, Button } from "@andertal/ui";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { getBulkMediaCopy } from "@/lib/products-pages-i18n";
 

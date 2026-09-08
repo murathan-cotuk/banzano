@@ -31,8 +31,11 @@ export default function PortalNav() {
       <div style={S.sep} />
       <a href={`/${locale}/dashboard`} style={S.link(isActive('dashboard'))}>{t('dashboard')}</a>
       <a href={`/${locale}/links`} style={S.link(isActive('links'))}>{t('links')}</a>
+      <a href={`/${locale}/referrals`} style={S.link(isActive('referrals'))}>{t('referrals')}</a>
       <a href={`/${locale}/reports`} style={S.link(isActive('reports'))}>{t('reports')}</a>
+      <a href={`/${locale}/payouts`} style={S.link(isActive('payouts'))}>{t('payouts')}</a>
       <a href={`/${locale}/resources`} style={S.link(isActive('resources'))}>{t('resources')}</a>
+      <a href={`/${locale}/settings`} style={S.link(isActive('settings'))}>{t('settings')}</a>
       <a href={`/${locale}/terms`} style={S.link(isActive('terms'))}>{t('terms')}</a>
       <div style={S.spacer} />
       <button style={S.logoutBtn} onClick={logout}>{t('logout')}</button>

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { getMedusaAdminClient } from "@/lib/medusa-admin-client";
 
 const NAV_ITEMS = [

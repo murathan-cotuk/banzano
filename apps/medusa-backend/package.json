@@ -25,7 +25,7 @@
     "patch": "node scripts/patch-link-modules.js",
     "test:eu-origin": "node --test src/eu-origin/metadata.test.js",
     "test:media-filename": "node --test src/media-filename.test.js",
-    "test": "node --test --test-reporter=spec src/eu-origin/metadata.test.js src/media-filename.test.js src/support-case-core.test.js src/goods-vat.test.js src/bonus-settlement.test.js src/flow-triggers.test.js src/flow-catalog.test.js src/customer-support-landing-seed.test.js src/modules/affiliate-platform/attribution-engine.test.js src/modules/affiliate-platform/commission-calculator.test.js src/modules/affiliate-platform/codes.test.js src/modules/affiliate-platform/auth.test.js",
+    "test": "node --test --test-reporter=spec src/eu-origin/metadata.test.js src/media-filename.test.js src/support-case-core.test.js src/goods-vat.test.js src/bonus-settlement.test.js src/flow-triggers.test.js src/flow-catalog.test.js src/customer-support-landing-seed.test.js src/store-category-tree.test.js src/modules/affiliate-platform/attribution-engine.test.js src/modules/affiliate-platform/commission-calculator.test.js src/modules/affiliate-platform/codes.test.js src/modules/affiliate-platform/auth.test.js src/product-auto-translate.test.js src/product-url-handle.test.js src/metaobject-locale-remap.test.js",
     "test:support-cases": "node --test --test-reporter=spec src/support-case-core.test.js",
     "test:customer-support-landing": "node --test --test-reporter=spec src/customer-support-landing-seed.test.js",
     "smoke:customer-support-landing": "node scripts/smoke-customer-support-landing.js",

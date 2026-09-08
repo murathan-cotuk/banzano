@@ -975,7 +975,7 @@ export default function CategoryTemplate() {
         setError(null);
         const [catResBySlug, catResTree, productRes] = await Promise.all([
           fetch(`/api/store-categories${storeCategoriesQuery(locale, { slug })}`).then((r) => r.json()).catch(() => ({ categories: [] })),
-          cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 60000 }).catch(() => ({ tree: [] })),
+          cachedJsonFetch(`/api/store-categories${storeCategoriesQuery(locale, { tree: "true", is_visible: "true" })}`, { ttlMs: 15000 }).catch(() => ({ tree: [] })),
           fetch(`/api/store-products?category=${encodeURIComponent(slug)}&limit=5000`).then((r) => r.json()).catch(() => ({ products: [] })),
         ]);
         if (cancelled) return;

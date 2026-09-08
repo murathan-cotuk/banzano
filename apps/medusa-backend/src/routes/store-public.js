@@ -3,14 +3,13 @@ const { Router } = require('express')
 const {
   resolveAdminHub,
   mapAdminHubCategoryPgRow,
-  buildAdminHubCategoryTreeFromFlat,
   localizeCategoriesForRequest,
   localizeSingleCategoryForRequest,
   resolveCategoryRequestLocale,
 } = require('../categories-helpers')
-const { getProductsDbClient, listAdminHubProductsDb } = require('./admin-products')
-const { getApprovedSellerIdsSet, isStorePublishedStatus, isStoreVisibleSellerProduct } = require('./seller-settings')
-const { resolveUploadUrl, storeProductCategoryIds } = require('./store-products')
+const { getProductsDbClient } = require('./admin-products')
+const { resolveUploadUrl } = require('./store-products')
+const { loadSlimStoreCategoryTree } = require('../store-category-tree')
 const { resolveMenuService } = require('./menus')
 const { applyMenuLocale, normalizeMenuLocale } = require('../menu-auto-translate')
 const { getPooledClient } = require('../db-pool')
@@ -83,12 +82,7 @@ const storeCollectionsGET = async (req, res) => {
 let storeCategoriesTreeCache = new Map()
 const STORE_CATEGORIES_TREE_TTL_MS = 45_000
 // In-flight promise per cache key: without this, every concurrent request that
-// lands while the 45s cache is cold (e.g. right after it expires under real
-// traffic) independently re-runs the same expensive computation — including a
-// listAdminHubProductsDb({ limit: 10000 }) full-product-object fetch — instead
-// of sharing one result. Real production log: two concurrent requests for the
-// same locale each took 6+ seconds and produced a 6.8MB response at the same
-// moment, right before the backend hit a V8 "allocation failure" (OOM) crash.
+// lands while the 45s cache is cold independently re-runs the same tree build.
 const storeCategoriesTreeInFlight = new Map()
 const storeCategoriesGET = async (req, res) => {
   const adminHubService = resolveAdminHub()
@@ -154,57 +148,25 @@ const storeCategoriesGET = async (req, res) => {
     }
 
     // Share one in-flight computation across all requests for this locale that
-    // land while the cache is cold, instead of each one independently paying
-    // the full cost (category tree build + up to 10k product rows + localize).
+    // land while the cache is cold. Tree is loaded via slim SQL (no long_content,
+    // no 10k full-product fetch) so the 12k-category catalog cannot OOM the shop menu.
     let payloadPromise = storeCategoriesTreeInFlight.get(cacheKey)
     if (!payloadPromise) {
       payloadPromise = (async () => {
-        let tree
-        if (adminHubService) {
-          tree = await adminHubService.getCategoryTree({ is_visible: true })
-        } else {
-          // DB fallback
-          const client = getProductsDbClient()
-          if (!client) return { categories: [], tree: [], count: 0 }
-          await client.connect()
-          const r = await client.query(`SELECT * FROM admin_hub_categories WHERE active = true ORDER BY sort_order ASC, name ASC`)
-          await client.end()
-          let flat = r.rows.map(mapAdminHubCategoryPgRow)
-          flat = flat.filter((c) => c.is_visible !== false)
-          tree = buildAdminHubCategoryTreeFromFlat(flat)
-        }
-
-        let categoryIdsWithProducts = new Set()
+        const client = getPooledClient()
+        if (!client) return { categories: [], tree: [], count: 0 }
+        await client.connect()
         try {
-          const allProducts = await listAdminHubProductsDb({ limit: 10000 })
-          const approvedIds = await getApprovedSellerIdsSet()
-          for (const p of allProducts) {
-            if (!isStorePublishedStatus(p.status)) continue
-            if (!isStoreVisibleSellerProduct(p, approvedIds)) continue
-            for (const cid of storeProductCategoryIds(p)) categoryIdsWithProducts.add(cid)
-          }
-        } catch (_) {}
-
-        const annotateTree = (nodes) => {
-          for (const n of nodes || []) {
-            if (!n) continue
-            annotateTree(n.children)
-            const directHit = categoryIdsWithProducts.has(String(n.id).trim().toLowerCase())
-            const childHit = (n.children || []).some((c) => c && c.has_products)
-            n.has_products = directHit || childHit
-          }
+          const tree = await loadSlimStoreCategoryTree({
+            query: (sql, params) => client.query(sql, params),
+            resolveUploadUrl,
+          })
+          await localizeCategoriesForRequest(tree, req, client)
+          const categories = (tree || []).map((c) => ({ id: c.id, name: c.name, slug: c.slug, title: c.name, handle: c.slug }))
+          return { categories, tree, count: categories.length }
+        } finally {
+          try { await client.end() } catch (_) {}
         }
-        annotateTree(tree)
-        const hasAny = (nodes) => (nodes || []).some((n) => n?.has_products || hasAny(n?.children))
-        if (Array.isArray(tree) && tree.length > 0 && !hasAny(tree)) {
-          const relaxAll = (nodes) => { for (const n of nodes || []) { if (n) { n.has_products = true; relaxAll(n.children) } } }
-          relaxAll(tree)
-        }
-
-        await localizeCategoriesForRequest(tree, req, null)
-
-        const categories = (tree || []).map((c) => ({ id: c.id, name: c.name, slug: c.slug, title: c.name, handle: c.slug }))
-        return { categories, tree, count: categories.length }
       })()
         .then((result) => {
           storeCategoriesTreeCache.set(cacheKey, { at: Date.now(), payload: result })

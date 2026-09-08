@@ -844,7 +844,7 @@ function ContentMosaic({ container, preloadedProducts, locale = "de" }) {
     const param = container.collection_id
       ? `collection_id=${encodeURIComponent(container.collection_id)}`
       : `collection_handle=${encodeURIComponent(container.collection_handle)}`;
-    cachedJsonFetch(`/api/store-products?${param}&limit=100`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-products?${param}&limit=100`, { ttlMs: 15000 })
       .then((d) => setProducts(Array.isArray(d?.products) ? d.products : []))
       .catch(() => setProducts([]));
   }, [source, container.collection_id, container.collection_handle, preloadedProducts]);
@@ -1139,7 +1139,7 @@ function CollectionCarousel({ container, preloadedProducts, locale = "de" }) {
     const param = container.collection_id
       ? `collection_id=${encodeURIComponent(container.collection_id)}`
       : `collection_handle=${encodeURIComponent(container.collection_handle)}`;
-    cachedJsonFetch(`/api/store-products?${param}&limit=20`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-products?${param}&limit=20`, { ttlMs: 15000 })
       .then((d) => setProducts(Array.isArray(d?.products) ? d.products : []))
       .catch(() => setProducts([]));
   }, [container.collection_id, container.collection_handle, preloadedProducts]);
@@ -1234,7 +1234,7 @@ function BestsellerCarousel({ container, locale = "de" }) {
 
   useEffect(() => {
     if (!container.category_slug) { setProducts([]); return; }
-    cachedJsonFetch(`/api/store-products?category=${encodeURIComponent(container.category_slug)}&limit=50`, { ttlMs: 60000 })
+    cachedJsonFetch(`/api/store-products?category=${encodeURIComponent(container.category_slug)}&limit=50`, { ttlMs: 15000 })
       .then((d) => {
         const all = Array.isArray(d?.products) ? d.products : [];
         if (mode === "sale") {
@@ -2937,7 +2937,7 @@ export default function LandingContainers({ pageId, categoryId, initialContainer
               const param = c.collection_id
                 ? `collection_id=${encodeURIComponent(c.collection_id)}`
                 : `collection_handle=${encodeURIComponent(c.collection_handle)}`;
-              const d = await cachedJsonFetch(`/api/store-products?${param}&limit=${limit}`, { ttlMs: 60000 });
+              const d = await cachedJsonFetch(`/api/store-products?${param}&limit=${limit}`, { ttlMs: 15000 });
               return [key, Array.isArray(d?.products) ? d.products : []];
             } catch {
               return [key, []];
@@ -2987,7 +2987,7 @@ export default function LandingContainers({ pageId, categoryId, initialContainer
     if (!candidates.length) { setSidebarCategoryLinks([]); return; }
     Promise.all(
       candidates.map((l) =>
-        cachedJsonFetch(`/api/store-products?category=${encodeURIComponent(l.slug)}&limit=1`, { ttlMs: 60000 })
+        cachedJsonFetch(`/api/store-products?category=${encodeURIComponent(l.slug)}&limit=1`, { ttlMs: 15000 })
           .then((d) => ({ ...l, hasProducts: Array.isArray(d?.products) && d.products.length > 0 }))
           .catch(() => ({ ...l, hasProducts: false }))
       )

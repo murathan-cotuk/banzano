@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Returns"
+                  targetNamespace="https://andertal.com/bpmn">
+  <bpmn:collaboration id="Collab_Returns">
+    <bpmn:participant id="Pool_Returns" name="İade Süreci" processRef="Process_Returns" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Returns" name="İade Süreci" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Returns">
+      <bpmn:lane id="Lane_Returns_0" name="Müşteri">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_ship_back</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Returns_1" name="Satıcı">
+        <bpmn:flowNodeRef>task_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_approved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_receive</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Returns_2" name="Backend / Sistem">
+        <bpmn:flowNodeRef>task_refund</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_bonus_reverse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_commission_reverse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_affiliate_clawback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_done</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="İade Talebi Oluştur">
+      <bpmn:outgoing>Flow_Returns_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="task_review" name="Talebi İncele">
+      <bpmn:incoming>Flow_Returns_0</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_approved" name="Onaylandı mı?">
+      <bpmn:incoming>Flow_Returns_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Returns_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_reject" name="Reddet + Gerekçe Bildir">
+      <bpmn:incoming>Flow_Returns_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_reject" name="İade Reddedildi">
+      <bpmn:incoming>Flow_Returns_3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_ship_back" name="Ürünü Geri Gönder
+(İade Etiketi ile)">
+      <bpmn:incoming>Flow_Returns_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_receive" name="İade Alındı Onayı">
+      <bpmn:incoming>Flow_Returns_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_refund" name="Ödeme İadesi
+(Stripe Refund)">
+      <bpmn:incoming>Flow_Returns_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_bonus_reverse" name="Bonus Puan Ters Kaydı
+(Oranlı)">
+      <bpmn:incoming>Flow_Returns_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_commission_reverse" name="Satıcı Komisyonu Geri Al">
+      <bpmn:incoming>Flow_Returns_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_affiliate_clawback" name="Affiliate Komisyonu Geri Al
+(varsa)">
+      <bpmn:incoming>Flow_Returns_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_Returns_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_done" name="İade Tamamlandı">
+      <bpmn:incoming>Flow_Returns_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Returns_0" sourceRef="start" targetRef="task_review" />
+    <bpmn:sequenceFlow id="Flow_Returns_1" sourceRef="task_review" targetRef="gw_approved" />
+    <bpmn:sequenceFlow id="Flow_Returns_2" sourceRef="gw_approved" targetRef="task_reject" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_Returns_3" sourceRef="task_reject" targetRef="end_reject" />
+    <bpmn:sequenceFlow id="Flow_Returns_4" sourceRef="gw_approved" targetRef="task_ship_back" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_Returns_5" sourceRef="task_ship_back" targetRef="task_receive" />
+    <bpmn:sequenceFlow id="Flow_Returns_6" sourceRef="task_receive" targetRef="task_refund" />
+    <bpmn:sequenceFlow id="Flow_Returns_7" sourceRef="task_refund" targetRef="task_bonus_reverse" />
+    <bpmn:sequenceFlow id="Flow_Returns_8" sourceRef="task_bonus_reverse" targetRef="task_commission_reverse" />
+    <bpmn:sequenceFlow id="Flow_Returns_9" sourceRef="task_commission_reverse" targetRef="task_affiliate_clawback" />
+    <bpmn:sequenceFlow id="Flow_Returns_10" sourceRef="task_affiliate_clawback" targetRef="end_done" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_Returns">
+    <bpmndi:BPMNPlane id="Plane_Returns" bpmnElement="Collab_Returns">
+      <bpmndi:BPMNShape id="Pool_Returns_di" bpmnElement="Pool_Returns" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="2280" height="570" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Returns_0_di" bpmnElement="Lane_Returns_0" isHorizontal="true">
+        <dc:Bounds x="70" y="90" width="2250" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Returns_1_di" bpmnElement="Lane_Returns_1" isHorizontal="true">
+        <dc:Bounds x="70" y="240" width="2250" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Returns_2_di" bpmnElement="Lane_Returns_2" isHorizontal="true">
+        <dc:Bounds x="70" y="390" width="2250" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_review_di" bpmnElement="task_review">
+        <dc:Bounds x="330" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_approved_di" bpmnElement="gw_approved">
+        <dc:Bounds x="500" y="270" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_reject_di" bpmnElement="task_reject">
+        <dc:Bounds x="670" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_reject_di" bpmnElement="end_reject">
+        <dc:Bounds x="840" y="270" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_ship_back_di" bpmnElement="task_ship_back">
+        <dc:Bounds x="1010" y="120" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_receive_di" bpmnElement="task_receive">
+        <dc:Bounds x="1180" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_refund_di" bpmnElement="task_refund">
+        <dc:Bounds x="1350" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_bonus_reverse_di" bpmnElement="task_bonus_reverse">
+        <dc:Bounds x="1520" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_commission_reverse_di" bpmnElement="task_commission_reverse">
+        <dc:Bounds x="1690" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_affiliate_clawback_di" bpmnElement="task_affiliate_clawback">
+        <dc:Bounds x="1860" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_done_di" bpmnElement="end_done">
+        <dc:Bounds x="2030" y="420" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Returns_0_di" bpmnElement="Flow_Returns_0">
+        <di:waypoint x="196" y="138" />
+        <di:waypoint x="330" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_1_di" bpmnElement="Flow_Returns_1">
+        <di:waypoint x="460" y="305" />
+        <di:waypoint x="500" y="293" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_2_di" bpmnElement="Flow_Returns_2">
+        <di:waypoint x="546" y="293" />
+        <di:waypoint x="670" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_3_di" bpmnElement="Flow_Returns_3">
+        <di:waypoint x="800" y="305" />
+        <di:waypoint x="840" y="288" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_4_di" bpmnElement="Flow_Returns_4">
+        <di:waypoint x="546" y="293" />
+        <di:waypoint x="1010" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_5_di" bpmnElement="Flow_Returns_5">
+        <di:waypoint x="1140" y="155" />
+        <di:waypoint x="1180" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_6_di" bpmnElement="Flow_Returns_6">
+        <di:waypoint x="1310" y="305" />
+        <di:waypoint x="1350" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_7_di" bpmnElement="Flow_Returns_7">
+        <di:waypoint x="1480" y="455" />
+        <di:waypoint x="1520" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_8_di" bpmnElement="Flow_Returns_8">
+        <di:waypoint x="1650" y="455" />
+        <di:waypoint x="1690" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_9_di" bpmnElement="Flow_Returns_9">
+        <di:waypoint x="1820" y="455" />
+        <di:waypoint x="1860" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Returns_10_di" bpmnElement="Flow_Returns_10">
+        <di:waypoint x="1990" y="455" />
+        <di:waypoint x="2030" y="438" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Compliance"
+                  targetNamespace="https://andertal.com/bpmn">
+  <bpmn:collaboration id="Collab_Compliance">
+    <bpmn:participant id="Pool_Compliance" name="Uyumluluk (Compliance) İnceleme Süreci" processRef="Process_Compliance" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Compliance" name="Uyumluluk (Compliance) İnceleme Süreci" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Compliance">
+      <bpmn:lane id="Lane_Compliance_0" name="Satıcı">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Compliance_1" name="Backend / Sistem (Arka Plan)">
+        <bpmn:flowNodeRef>task_resolve_profile</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_check_fields</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_missing</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_ok</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_ok</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_stamp</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Compliance_2" name="Superuser">
+        <bpmn:flowNodeRef>task_queue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_manual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_reviewed</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Ürün Oluştur / Güncelle">
+      <bpmn:outgoing>Flow_Compliance_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="task_resolve_profile" name="Kategorinin Uyumluluk
+Profilini Çöz">
+      <bpmn:incoming>Flow_Compliance_0</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_check_fields" name="Eksik Alanları Tespit Et
+(Arka Planda, Engellemeden)">
+      <bpmn:incoming>Flow_Compliance_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_missing" name="Eksik Alan
+Var mı?">
+      <bpmn:incoming>Flow_Compliance_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Compliance_5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_ok" name="compliance_review.ok = true">
+      <bpmn:incoming>Flow_Compliance_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_ok" name="Ürün Yayında
+(Sorun Yok)">
+      <bpmn:incoming>Flow_Compliance_4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_stamp" name="needs_compliance_review
+İşaretle">
+      <bpmn:incoming>Flow_Compliance_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_queue" name="Compliance Review
+Kuyruğunda Listele">
+      <bpmn:incoming>Flow_Compliance_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_manual" name="İncele + Gerekirse
+Kategori Profilini Düzelt">
+      <bpmn:incoming>Flow_Compliance_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_Compliance_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_reviewed" name="İnceleme Tamamlandı">
+      <bpmn:incoming>Flow_Compliance_8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Compliance_0" sourceRef="start" targetRef="task_resolve_profile" />
+    <bpmn:sequenceFlow id="Flow_Compliance_1" sourceRef="task_resolve_profile" targetRef="task_check_fields" />
+    <bpmn:sequenceFlow id="Flow_Compliance_2" sourceRef="task_check_fields" targetRef="gw_missing" />
+    <bpmn:sequenceFlow id="Flow_Compliance_3" sourceRef="gw_missing" targetRef="task_ok" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_Compliance_4" sourceRef="task_ok" targetRef="end_ok" />
+    <bpmn:sequenceFlow id="Flow_Compliance_5" sourceRef="gw_missing" targetRef="task_stamp" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_Compliance_6" sourceRef="task_stamp" targetRef="task_queue" />
+    <bpmn:sequenceFlow id="Flow_Compliance_7" sourceRef="task_queue" targetRef="task_manual" />
+    <bpmn:sequenceFlow id="Flow_Compliance_8" sourceRef="task_manual" targetRef="end_reviewed" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_Compliance">
+    <bpmndi:BPMNPlane id="Plane_Compliance" bpmnElement="Collab_Compliance">
+      <bpmndi:BPMNShape id="Pool_Compliance_di" bpmnElement="Pool_Compliance" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="1940" height="570" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Compliance_0_di" bpmnElement="Lane_Compliance_0" isHorizontal="true">
+        <dc:Bounds x="70" y="90" width="1910" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Compliance_1_di" bpmnElement="Lane_Compliance_1" isHorizontal="true">
+        <dc:Bounds x="70" y="240" width="1910" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Compliance_2_di" bpmnElement="Lane_Compliance_2" isHorizontal="true">
+        <dc:Bounds x="70" y="390" width="1910" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_resolve_profile_di" bpmnElement="task_resolve_profile">
+        <dc:Bounds x="330" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_check_fields_di" bpmnElement="task_check_fields">
+        <dc:Bounds x="500" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_missing_di" bpmnElement="gw_missing">
+        <dc:Bounds x="670" y="270" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_ok_di" bpmnElement="task_ok">
+        <dc:Bounds x="840" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_ok_di" bpmnElement="end_ok">
+        <dc:Bounds x="1010" y="270" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_stamp_di" bpmnElement="task_stamp">
+        <dc:Bounds x="1180" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_queue_di" bpmnElement="task_queue">
+        <dc:Bounds x="1350" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_manual_di" bpmnElement="task_manual">
+        <dc:Bounds x="1520" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_reviewed_di" bpmnElement="end_reviewed">
+        <dc:Bounds x="1690" y="420" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Compliance_0_di" bpmnElement="Flow_Compliance_0">
+        <di:waypoint x="196" y="138" />
+        <di:waypoint x="330" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_1_di" bpmnElement="Flow_Compliance_1">
+        <di:waypoint x="460" y="305" />
+        <di:waypoint x="500" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_2_di" bpmnElement="Flow_Compliance_2">
+        <di:waypoint x="630" y="305" />
+        <di:waypoint x="670" y="293" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_3_di" bpmnElement="Flow_Compliance_3">
+        <di:waypoint x="716" y="293" />
+        <di:waypoint x="840" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_4_di" bpmnElement="Flow_Compliance_4">
+        <di:waypoint x="970" y="305" />
+        <di:waypoint x="1010" y="288" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_5_di" bpmnElement="Flow_Compliance_5">
+        <di:waypoint x="716" y="293" />
+        <di:waypoint x="1180" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_6_di" bpmnElement="Flow_Compliance_6">
+        <di:waypoint x="1310" y="305" />
+        <di:waypoint x="1350" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_7_di" bpmnElement="Flow_Compliance_7">
+        <di:waypoint x="1480" y="455" />
+        <di:waypoint x="1520" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Compliance_8_di" bpmnElement="Flow_Compliance_8">
+        <di:waypoint x="1650" y="455" />
+        <di:waypoint x="1690" y="438" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

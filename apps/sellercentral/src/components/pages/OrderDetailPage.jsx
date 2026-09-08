@@ -1,7 +1,8 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useLocale } from "next-intl";
 import { lt } from "@/lib/locale-text";
 import { Button } from "@shopify/polaris";
@@ -225,7 +226,7 @@ export default function OrderDetailPage() {
     try {
       const client = getMedusaAdminClient();
       await client.deleteOrder(id);
-      router.push(`/${locale}/orders`);
+      router.push("/orders");
     } catch (e) {
       setError(userError(e, locale, c.deleteFailed));
     }
@@ -239,7 +240,7 @@ export default function OrderDetailPage() {
     return (
       <div style={{ padding: 24 }}>
         <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 16, color: "#b91c1c" }}>{error}</div>
-        <button onClick={() => router.push(`/${locale}/orders`)} style={btnStyle}>← {ui.orders}</button>
+        <button onClick={() => router.push("/orders")} style={btnStyle}>← {ui.orders}</button>
       </div>
     );
   }
@@ -272,12 +273,12 @@ export default function OrderDetailPage() {
     e?.preventDefault?.();
     if (!isSuperuser || !order) return;
     if (order.customer_id) {
-      router.push(`/${locale}/customers/${order.customer_id}`);
+      router.push(`/customers/${order.customer_id}`);
       return;
     }
     const email = String(order.email || "").trim();
     if (!email) {
-      router.push(`/${locale}/customers`);
+      router.push("/customers");
       return;
     }
     try {
@@ -285,11 +286,11 @@ export default function OrderDetailPage() {
       const data = await client.getCustomers({ email, limit: 1 });
       const found = data?.customers?.[0];
       if (found?.id) {
-        router.push(`/${locale}/customers/${found.id}`);
+        router.push(`/customers/${found.id}`);
         return;
       }
     } catch (_) {}
-    router.push(`/${locale}/customers`);
+    router.push("/customers");
   };
 
   return (
@@ -307,7 +308,7 @@ export default function OrderDetailPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
-          <Button onClick={() => router.push(`/${locale}/orders`)}>← {ui.orders}</Button>
+          <Button onClick={() => router.push("/orders")}>← {ui.orders}</Button>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
             {c.orderTitle} #{order?.order_number || "—"}
           </h1>

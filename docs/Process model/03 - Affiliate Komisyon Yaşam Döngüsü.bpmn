@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_AffiliateCommission"
+                  targetNamespace="https://andertal.com/bpmn">
+  <bpmn:collaboration id="Collab_AffiliateCommission">
+    <bpmn:participant id="Pool_AffiliateCommission" name="Affiliate Komisyon Yaşam Döngüsü (Model 2 — Product Referral)" processRef="Process_AffiliateCommission" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_AffiliateCommission" name="Affiliate Komisyon Yaşam Döngüsü (Model 2 — Product Referral)" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_AffiliateCommission">
+      <bpmn:lane id="Lane_AffiliateCommission_0" name="Ziyaretçi / Müşteri">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_purchase</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_AffiliateCommission_1" name="Shop">
+        <bpmn:flowNodeRef>gw_consent</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_no_consent</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_no_consent</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_AffiliateCommission_2" name="Backend / Sistem">
+        <bpmn:flowNodeRef>task_attribution</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_calc_commission</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_wait30</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>gw_refunded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_clawback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_clawback</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_confirm</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>task_monthly</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_AffiliateCommission_3" name="Andertal (Superuser / Stripe)">
+        <bpmn:flowNodeRef>task_transfer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_paid</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Affiliate Linkine Tıkla
+(?ref=AFF_XXX)">
+      <bpmn:outgoing>Flow_AffiliateCommission_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="gw_consent" name="Çerez Onayı
+Var mı?">
+      <bpmn:incoming>Flow_AffiliateCommission_0</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_AffiliateCommission_3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_no_consent" name="Tıklamayı Kaydet
+(Attribution OLUŞTURULMAZ)">
+      <bpmn:incoming>Flow_AffiliateCommission_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_no_consent" name="Takip Yapılmadı">
+      <bpmn:incoming>Flow_AffiliateCommission_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_attribution" name="Tıklamayı Kaydet +
+Attribution Oluştur (30 gün)">
+      <bpmn:incoming>Flow_AffiliateCommission_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_purchase" name="Ürünü Satın Al
+(30 gün içinde)">
+      <bpmn:incoming>Flow_AffiliateCommission_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_calc_commission" name="Komisyon Hesapla
+(status = pending)">
+      <bpmn:incoming>Flow_AffiliateCommission_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_wait30" name="30 Gün Onay Bekleme Süresi">
+      <bpmn:incoming>Flow_AffiliateCommission_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="gw_refunded" name="Sipariş İade
+Edildi mi?">
+      <bpmn:incoming>Flow_AffiliateCommission_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_8</bpmn:outgoing>
+      <bpmn:outgoing>Flow_AffiliateCommission_10</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="task_clawback" name="Komisyonu Geri Al
+(status = clawed_back)">
+      <bpmn:incoming>Flow_AffiliateCommission_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_clawback" name="Komisyon İptal">
+      <bpmn:incoming>Flow_AffiliateCommission_9</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="task_confirm" name="Komisyonu Onayla
+(status = confirmed)">
+      <bpmn:incoming>Flow_AffiliateCommission_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_monthly" name="Aylık Ödeme Toplama
+(min. 50 €, ayın 1'i)">
+      <bpmn:incoming>Flow_AffiliateCommission_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="task_transfer" name="Stripe Connect Transfer
+(AFFILIATE_PAYOUTS_ENABLED gerekli)">
+      <bpmn:incoming>Flow_AffiliateCommission_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_AffiliateCommission_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end_paid" name="Affiliate'e Ödendi">
+      <bpmn:incoming>Flow_AffiliateCommission_13</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_0" sourceRef="start" targetRef="gw_consent" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_1" sourceRef="gw_consent" targetRef="task_no_consent" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_2" sourceRef="task_no_consent" targetRef="end_no_consent" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_3" sourceRef="gw_consent" targetRef="task_attribution" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_4" sourceRef="task_attribution" targetRef="task_purchase" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_5" sourceRef="task_purchase" targetRef="task_calc_commission" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_6" sourceRef="task_calc_commission" targetRef="task_wait30" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_7" sourceRef="task_wait30" targetRef="gw_refunded" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_8" sourceRef="gw_refunded" targetRef="task_clawback" name="Evet" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_9" sourceRef="task_clawback" targetRef="end_clawback" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_10" sourceRef="gw_refunded" targetRef="task_confirm" name="Hayır" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_11" sourceRef="task_confirm" targetRef="task_monthly" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_12" sourceRef="task_monthly" targetRef="task_transfer" />
+    <bpmn:sequenceFlow id="Flow_AffiliateCommission_13" sourceRef="task_transfer" targetRef="end_paid" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_AffiliateCommission">
+    <bpmndi:BPMNPlane id="Plane_AffiliateCommission" bpmnElement="Collab_AffiliateCommission">
+      <bpmndi:BPMNShape id="Pool_AffiliateCommission_di" bpmnElement="Pool_AffiliateCommission" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="2790" height="720" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_AffiliateCommission_0_di" bpmnElement="Lane_AffiliateCommission_0" isHorizontal="true">
+        <dc:Bounds x="70" y="90" width="2760" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_AffiliateCommission_1_di" bpmnElement="Lane_AffiliateCommission_1" isHorizontal="true">
+        <dc:Bounds x="70" y="240" width="2760" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_AffiliateCommission_2_di" bpmnElement="Lane_AffiliateCommission_2" isHorizontal="true">
+        <dc:Bounds x="70" y="390" width="2760" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_AffiliateCommission_3_di" bpmnElement="Lane_AffiliateCommission_3" isHorizontal="true">
+        <dc:Bounds x="70" y="540" width="2760" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="160" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_consent_di" bpmnElement="gw_consent">
+        <dc:Bounds x="330" y="270" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_no_consent_di" bpmnElement="task_no_consent">
+        <dc:Bounds x="500" y="270" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_no_consent_di" bpmnElement="end_no_consent">
+        <dc:Bounds x="670" y="270" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_attribution_di" bpmnElement="task_attribution">
+        <dc:Bounds x="840" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_purchase_di" bpmnElement="task_purchase">
+        <dc:Bounds x="1010" y="120" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_calc_commission_di" bpmnElement="task_calc_commission">
+        <dc:Bounds x="1180" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_wait30_di" bpmnElement="task_wait30">
+        <dc:Bounds x="1350" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_refunded_di" bpmnElement="gw_refunded">
+        <dc:Bounds x="1520" y="420" width="46" height="46" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_clawback_di" bpmnElement="task_clawback">
+        <dc:Bounds x="1690" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_clawback_di" bpmnElement="end_clawback">
+        <dc:Bounds x="1860" y="420" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_confirm_di" bpmnElement="task_confirm">
+        <dc:Bounds x="2030" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_monthly_di" bpmnElement="task_monthly">
+        <dc:Bounds x="2200" y="420" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="task_transfer_di" bpmnElement="task_transfer">
+        <dc:Bounds x="2370" y="570" width="130" height="70" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_paid_di" bpmnElement="end_paid">
+        <dc:Bounds x="2540" y="570" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_0_di" bpmnElement="Flow_AffiliateCommission_0">
+        <di:waypoint x="196" y="138" />
+        <di:waypoint x="330" y="293" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_1_di" bpmnElement="Flow_AffiliateCommission_1">
+        <di:waypoint x="376" y="293" />
+        <di:waypoint x="500" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_2_di" bpmnElement="Flow_AffiliateCommission_2">
+        <di:waypoint x="630" y="305" />
+        <di:waypoint x="670" y="288" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_3_di" bpmnElement="Flow_AffiliateCommission_3">
+        <di:waypoint x="376" y="293" />
+        <di:waypoint x="840" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_4_di" bpmnElement="Flow_AffiliateCommission_4">
+        <di:waypoint x="970" y="455" />
+        <di:waypoint x="1010" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_5_di" bpmnElement="Flow_AffiliateCommission_5">
+        <di:waypoint x="1140" y="155" />
+        <di:waypoint x="1180" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_6_di" bpmnElement="Flow_AffiliateCommission_6">
+        <di:waypoint x="1310" y="455" />
+        <di:waypoint x="1350" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_7_di" bpmnElement="Flow_AffiliateCommission_7">
+        <di:waypoint x="1480" y="455" />
+        <di:waypoint x="1520" y="443" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_8_di" bpmnElement="Flow_AffiliateCommission_8">
+        <di:waypoint x="1566" y="443" />
+        <di:waypoint x="1690" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_9_di" bpmnElement="Flow_AffiliateCommission_9">
+        <di:waypoint x="1820" y="455" />
+        <di:waypoint x="1860" y="438" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_10_di" bpmnElement="Flow_AffiliateCommission_10">
+        <di:waypoint x="1566" y="443" />
+        <di:waypoint x="2030" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_11_di" bpmnElement="Flow_AffiliateCommission_11">
+        <di:waypoint x="2160" y="455" />
+        <di:waypoint x="2200" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_12_di" bpmnElement="Flow_AffiliateCommission_12">
+        <di:waypoint x="2330" y="455" />
+        <di:waypoint x="2370" y="605" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AffiliateCommission_13_di" bpmnElement="Flow_AffiliateCommission_13">
+        <di:waypoint x="2500" y="605" />
+        <di:waypoint x="2540" y="588" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

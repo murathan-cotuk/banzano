@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import {
   Page,
   Layout,
@@ -1355,7 +1355,7 @@ export default function ContentMenusPage({ panelMode = null, panelMenuId = null 
     const opts = [{ label: "— None (top level) —", value: "" }];
     flatItems.forEach(({ id, label, _level }) => {
       if (id === excludeId) return;
-      opts.push({ label: "  ".repeat(_level) + (_level ? "↳ " : "") + (label || id), value: id });
+      opts.push({ label: "  ".repeat(_level) + (_level ? "? " : "") + (label || id), value: id });
     });
     return opts;
   };
@@ -1666,7 +1666,7 @@ export default function ContentMenusPage({ panelMode = null, panelMenuId = null 
                   options={[
                     { label: "Top level", value: "" },
                     ...flatItems.map(({ id, label, _level }) => ({
-                      label: "  ".repeat(_level) + (_level ? "↳ " : "") + (label || id),
+                      label: "  ".repeat(_level) + (_level ? "? " : "") + (label || id),
                       value: id,
                     })),
                   ]}

@@ -510,13 +510,27 @@ const mapAdminHubToStoreProduct = (p, marketCountry = 'DE') => {
   const variantImagesResolved = firstVariant
     ? (firstVariant.images && firstVariant.images.length > 0 ? firstVariant.images : (firstVariant.image_url ? [firstVariant.image_url] : []))
     : []
-  const thumb = variantImagesResolved[0] || ownThumb || null
-  const imagesResolved = variantImagesResolved.length > 0 ? variantImagesResolved : ownImagesResolved
+  let thumb = variantImagesResolved[0] || ownThumb || null
+  let imagesResolved = variantImagesResolved.length > 0 ? variantImagesResolved : ownImagesResolved
+  if (!thumb || imagesResolved.length === 0) {
+    const trMap = meta.translations && typeof meta.translations === 'object' ? meta.translations : {}
+    const fallbackMedia = []
+    for (const loc of ['de', 'en', 'tr', 'fr', 'es', 'it']) {
+      const list = Array.isArray(trMap[loc]?.media) ? trMap[loc].media : []
+      for (const item of list) {
+        const resolved = resolveUploadUrl(typeof item === 'string' ? item : (item && item.url) || null)
+        if (resolved && !fallbackMedia.includes(resolved)) fallbackMedia.push(resolved)
+      }
+    }
+    if (!thumb && fallbackMedia[0]) thumb = fallbackMedia[0]
+    if (imagesResolved.length === 0 && fallbackMedia.length) imagesResolved = fallbackMedia
+  }
   const metaTranslations = meta.translations && typeof meta.translations === 'object'
     ? Object.fromEntries(
         Object.entries(meta.translations).map(([loc, tr]) => {
           const trOut = { ...(tr && typeof tr === 'object' ? tr : {}) }
           if (Array.isArray(tr && tr.media)) trOut.media = tr.media.map((u) => resolveUploadUrl(u)).filter(Boolean)
+          delete trOut._auto
           return [loc, trOut]
         })
       )

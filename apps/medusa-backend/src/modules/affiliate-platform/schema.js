@@ -162,6 +162,16 @@ async function ensureAffiliateTables(client) {
   // seller_users already exists (seller-auth.js) — this column links a seller to the affiliate
   // whose signup link they registered through (Model 1). Nullable: most sellers have no referral.
   await client.query(`ALTER TABLE seller_users ADD COLUMN IF NOT EXISTS referred_by_affiliate_id uuid REFERENCES affiliates(id)`)
+
+  // Added in PR 11 — CREATE TABLE IF NOT EXISTS above is a no-op on an already-existing affiliates
+  // table, so this column needs its own explicit ALTER (same reason as referred_by_affiliate_id).
+  await client.query(`ALTER TABLE affiliates ADD COLUMN IF NOT EXISTS stripe_onboarding_complete BOOLEAN NOT NULL DEFAULT false`)
+
+  // Added in PR 12 — audit trail for /affiliate-admin's manual "Commission Adjustments" (bonus /
+  // clawback), populated only on affiliate_commissions rows with source_type IN
+  // ('manual_bonus','manual_clawback'); NULL for ordinary seller_referral/product_sale rows.
+  await client.query(`ALTER TABLE affiliate_commissions ADD COLUMN IF NOT EXISTS adjustment_reason TEXT`)
+  await client.query(`ALTER TABLE affiliate_commissions ADD COLUMN IF NOT EXISTS adjustment_by TEXT`)
 }
 
 module.exports = { ensureAffiliateTables }

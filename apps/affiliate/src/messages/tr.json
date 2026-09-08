@@ -2,8 +2,11 @@
   "nav": {
     "dashboard": "Panel",
     "links": "Linkler",
+    "referrals": "Yönlendirmeler",
     "reports": "Raporlar",
+    "payouts": "Ödemeler",
     "resources": "Kaynaklar",
+    "settings": "Ayarlar",
     "terms": "Şartlar",
     "logout": "Çıkış yap"
   },
@@ -30,7 +33,10 @@
     "requiredFields": "Ad, e-posta ve şifre zorunludur.",
     "requiredCountry": "Ülke zorunludur.",
     "passwordTooShort": "Şifre en az 8 karakter olmalıdır.",
-    "mustAgree": "Kayıt olmak için şartları kabul etmelisiniz."
+    "mustAgree": "Kayıt olmak için şartları kabul etmelisiniz.",
+    "viewTerms": "Affiliate şartlarını görüntüle",
+    "viewPrivacy": "Gizlilik politikasını görüntüle",
+    "selectCountry": "Ülke seçin"
   },
   "dashboard": {
     "title": "Linklerinizi, tıklamalarınızı ve komisyonlarınızı takip edin",

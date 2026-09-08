@@ -22,12 +22,24 @@ function coerceMediaList(list) {
   return list.map(coerceMediaUrl).filter(Boolean);
 }
 
+const MEDIA_LOCALE_FALLBACK = ["de", "en", "tr", "fr", "es", "it"];
+
 export function localizedProductMediaList(product, locale) {
   const meta = product?.metadata || {};
   const loc = String(locale || "de").toLowerCase();
-  const tr = meta.translations?.[loc];
-  if (tr && Array.isArray(tr.media) && tr.media.length > 0) return coerceMediaList(tr.media);
-  return coerceMediaList(Array.isArray(meta.media) ? meta.media : []);
+  const trMap = meta.translations && typeof meta.translations === "object" ? meta.translations : {};
+  const locList = coerceMediaList(trMap[loc]?.media);
+  if (locList.length) return locList;
+  const deList = coerceMediaList(trMap.de?.media);
+  if (deList.length) return deList;
+  const root = coerceMediaList(Array.isArray(meta.media) ? meta.media : []);
+  if (root.length) return root;
+  for (const l of MEDIA_LOCALE_FALLBACK) {
+    if (l === loc || l === "de") continue;
+    const list = coerceMediaList(trMap[l]?.media);
+    if (list.length) return list;
+  }
+  return [];
 }
 
 export function variantImageUrlForLocale(variant, locale) {
