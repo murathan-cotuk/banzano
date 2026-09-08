@@ -275,3 +275,25 @@ TALİMAT A — Kategori + ülke bazlı compliance sistemi
 6. ~~Faz 4 shop gösterimi (kategoriye özel alanlar + i18n etiketler)~~ **[TAMAMLANDI — 2026-07-23, `ProductTemplate.jsx`/`ProductTemplateMobile.jsx`/`prop-labels.js`]**
 7. Ancak kategori ataması biraz daha CSV override ile iyileştirildikten ve superuser bir süre `compliance_review` verisini gözlemleyip güvendikten SONRA, SERT (bloklayan) gate'e geçiş düşünülebilir — şu an bilinçli olarak yapılmadı.
 > ⚠️ Bu bir hukuki tavsiye değildir; canlıya almadan önce avukat/compliance danışmanı doğrulaması şart (JSON `_meta.legal_disclaimer`).
+
+## 📋 EK DURUM RAPORU (Claude — 2026-09-08, beşinci oturum)
+
+Kalan açık maddeler tek tek incelendi:
+
+- ✅ **docs/COMPLIANCE.md yazıldı.** 3 katmanlı model, 15 profil, 9 overlay, kod haritası, hangi alanların sert engellediği/engellemediği, bilinen sınırlar — hepsi tek dosyada.
+- ✅ **Excel-import compliance kontrolü — kod değişikliği GEREKMEDİ, zaten kapsanıyor.** `sellercentral/api/import-export/import/route.js` incelendi: gerçek satırları `POST /admin-hub/products` ve `PUT /admin-hub/products/:id` uçlarına gönderiyor — yani manuel ürün kaydıyla AYNI backend yolunu kullanıyor. `stampComplianceReviewAsync` bu iki uçta zaten çağrıldığı için (satır 570, 719), Excel'den içeri alınan ürünler de otomatik olarak `compliance_review` ile işaretleniyor ve eksikse `/content/compliance-review`'da görünüyor. Ayrı bir import-özel validasyon yazmaya gerek yoktu.
+- ✅ **2. satıcı aynı EAN'e eklerken GPSR tekrar istenmiyor — doğrulandı, zaten çözülmüş.** Kod incelemesi: mevcut EAN'e ikinci bir satıcı eklendiğinde bu artık ayrı bir `admin_hub_products` satırı DEĞİL, aynı ürüne bağlı yeni bir `admin_hub_seller_listings` satırı olarak ekleniyor (bkz. `admin-products.js` içindeki çoklu `INSERT INTO admin_hub_seller_listings` yolları + zayıf EAN-normalizasyon bug'ının düzeltilmiş olması). GPSR alanları `admin_hub_products.metadata` üzerinde merkezi durduğu ve `validateRequiredGpsrForProduct` sadece asıl ürün oluşturma/güncelleme akışında çalıştığı için, salt listing ekleme akışı bu kontrolden hiç geçmiyor — ikinci satıcı GPSR'ı tekrar girmek zorunda kalmıyor. Kabul kriteri işaretlendi.
+- ✅ **DE/AT etiket dili uyarısı UI'a eklendi.** `ComplianceFieldsSection.jsx`'e, overlay'in `label_language` alanı doluysa (DE→Almanca, FR→Fransızca, vb.) 6 dilde bir bilgi banner'ı eklendi ("Bu pazar yeri için ürün etiketi X dilinde olmalıdır").
+- ⏸️ **GPSR'ın sert bloklama davranışı profile-bazlı hale getirilmedi — kasıtlı olarak dokunulmadı.** Bu maddenin kendi metninde ("Sıradaki adım" #7) net biçimde belirtildiği gibi, kategori ataması hâlâ anahtar-kelime tabanlı ve ~%33 kategori genel GPSR'a düşüyor; bunu şu an sert bir kapıya çevirmek yanlışlıkla satıcı bloklama riski taşıyor. Kullanıcıdan açık onay gelmeden bu değiştirilmedi.
+
+### Kabul kriterleri — güncel durum
+- [x] Kitap kategorisinde WEEE/EPREL GÖRÜNMEZ
+- [x] Kategoriye özel alanlar dinamik gösteriliyor
+- [~] Elektronikte WEEE zorunlu, eksikse active olamaz → motor + tespit çalışıyor, sert engelleme hâlâ bilinçli olarak kapalı
+- [x] DE'de Almanca etiket uyarısı → **YENİ, bu oturumda eklendi**
+- [x] 2. satıcı dolu GPSR tekrar istenmez → **doğrulandı, mevcut mimari zaten karşılıyor**
+- [x] `node --check` / lint temiz
+- [x] Kategori→profil ataması gerçek DB'ye yazıldı ve doğrulandı
+- [x] docs/COMPLIANCE.md → **YENİ, bu oturumda yazıldı**
+
+Kalan tek madde: sert GPSR gate'e geçiş — bilinçli olarak kullanıcı onayına bırakıldı.

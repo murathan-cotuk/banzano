@@ -72,6 +72,27 @@ export default function ComplianceFieldsSection({ client, categoryId, marketplac
   const profileTitle =
     pickI18n(schema.profile_label_i18n, locale) || schema.profile_label || "Compliance";
 
+  const LABEL_LANGUAGE_NAMES = {
+    de: pickI18n({ de: "Deutsch", en: "German", tr: "Almanca", fr: "allemand", es: "alemán", it: "tedesco" }, locale),
+    fr: pickI18n({ de: "Französisch", en: "French", tr: "Fransızca", fr: "français", es: "francés", it: "francese" }, locale),
+    it: pickI18n({ de: "Italienisch", en: "Italian", tr: "İtalyanca", fr: "italien", es: "italiano", it: "italiano" }, locale),
+    es: pickI18n({ de: "Spanisch", en: "Spanish", tr: "İspanyolca", fr: "espagnol", es: "español", it: "spagnolo" }, locale),
+    nl: pickI18n({ de: "Niederländisch", en: "Dutch", tr: "Flemenkçe", fr: "néerlandais", es: "neerlandés", it: "olandese" }, locale),
+    pl: pickI18n({ de: "Polnisch", en: "Polish", tr: "Lehçe", fr: "polonais", es: "polaco", it: "polacco" }, locale),
+    sv: pickI18n({ de: "Schwedisch", en: "Swedish", tr: "İsveççe", fr: "suédois", es: "sueco", it: "svedese" }, locale),
+  };
+  const labelLanguageName = schema.label_language ? LABEL_LANGUAGE_NAMES[schema.label_language] : null;
+  const labelLanguageNotice = labelLanguageName
+    ? pickI18n({
+        de: `Für diesen Marktplatz muss die Produktbeschriftung auf ${labelLanguageName} vorliegen.`,
+        en: `For this marketplace, the product label must be in ${labelLanguageName}.`,
+        tr: `Bu pazar yeri için ürün etiketi ${labelLanguageName} dilinde olmalıdır.`,
+        fr: `Pour cette place de marché, l'étiquetage du produit doit être en ${labelLanguageName}.`,
+        es: `Para este mercado, el etiquetado del producto debe estar en ${labelLanguageName}.`,
+        it: `Per questo mercato, l'etichettatura del prodotto deve essere in ${labelLanguageName}.`,
+      }, locale)
+    : null;
+
   const sectionIntro = pickI18n({
     de: "Felder für diese Produktkategorie (EU-Produktsicherheit). Pflichtfelder müssen ausgefüllt werden; optionale Felder helfen Kunden und Behörden. Tippen Sie auf „i“ für eine kurze Erklärung.",
     en: "Fields for this product category (EU product safety). Required fields must be filled; optional ones help customers and authorities. Tap “i” for a short explanation.",
@@ -103,6 +124,7 @@ export default function ComplianceFieldsSection({ client, categoryId, marketplac
       <Text as="p" variant="bodySm" tone="subdued">
         {sectionIntro}
       </Text>
+      {labelLanguageNotice ? <Banner tone="info">{labelLanguageNotice}</Banner> : null}
       <BlockStack gap="300">
         {extraKeys.map((key) => {
           const def = fieldDefs[key] || { type: "text", label_i18n: {}, help_text_i18n: {} };

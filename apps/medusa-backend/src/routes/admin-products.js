@@ -423,6 +423,7 @@ const adminHubComplianceReviewGET = async (req, res) => {
     await client.connect()
     const r = await client.query(`
       SELECT id, title, handle, seller_id, status,
+             metadata->>'category_id' AS category_id,
              metadata->'compliance_review' AS compliance_review
         FROM admin_hub_products
        WHERE metadata->'compliance_review'->>'ok' = 'false'
@@ -442,6 +443,38 @@ const adminHubComplianceReviewGET = async (req, res) => {
         }
       }
     }
+    // Category breadcrumb per flagged product, so ComplianceReviewPage can group by category
+    // instead of one long flat list.
+    const categoryIds = [...new Set(r.rows.map((row) => row.category_id).filter(Boolean))]
+    const catById = new Map()
+    if (categoryIds.length) {
+      const catRes = await client.query(
+        'SELECT id, name, parent_id FROM admin_hub_categories WHERE id = ANY($1)',
+        [categoryIds],
+      )
+      for (const row of catRes.rows) catById.set(row.id, row)
+      // walk up parents for any ancestor not already fetched (breadcrumb support)
+      let frontier = catRes.rows.map((row) => row.parent_id).filter(Boolean)
+      const seenIds = new Set(catById.keys())
+      while (frontier.length) {
+        const missing = [...new Set(frontier)].filter((id) => !seenIds.has(id))
+        if (!missing.length) break
+        const anc = await client.query('SELECT id, name, parent_id FROM admin_hub_categories WHERE id = ANY($1)', [missing])
+        for (const row of anc.rows) { catById.set(row.id, row); seenIds.add(row.id) }
+        frontier = anc.rows.map((row) => row.parent_id).filter(Boolean)
+      }
+    }
+    const categoryBreadcrumb = (id) => {
+      const parts = []
+      let cur = id ? catById.get(id) : null
+      const seen = new Set()
+      while (cur && !seen.has(cur.id)) {
+        seen.add(cur.id)
+        parts.unshift(cur.name || cur.id)
+        cur = cur.parent_id ? catById.get(cur.parent_id) : null
+      }
+      return parts
+    }
     await client.end()
     const { resolveComplianceProfile } = require('../compliance/resolve-compliance')
     res.json({
@@ -457,6 +490,7 @@ const adminHubComplianceReviewGET = async (req, res) => {
             missingFieldLabels = missingFields.map((key) => ({ key, label_i18n: resolved.field_definitions[key]?.label_i18n || {} }))
           } catch (_) { /* fall back to raw keys below */ }
         }
+        const breadcrumbParts = categoryBreadcrumb(row.category_id)
         return {
           id: row.id,
           title: row.title,
@@ -468,6 +502,9 @@ const adminHubComplianceReviewGET = async (req, res) => {
           profile_label_i18n: profileLabelI18n,
           missing_fields: missingFieldLabels,
           checked_at: row.compliance_review?.checked_at || null,
+          category_id: row.category_id || null,
+          category_name: breadcrumbParts.length ? breadcrumbParts[breadcrumbParts.length - 1] : null,
+          category_breadcrumb: breadcrumbParts.join(' > '),
         }
       }),
     })
