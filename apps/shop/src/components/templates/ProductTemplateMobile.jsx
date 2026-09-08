@@ -903,6 +903,7 @@ function hasStockForOption(variants, variationGroups, groupName, optionValue, se
       return String(ov[i] ?? "").trim().toLowerCase() === sel.trim().toLowerCase();
     });
     if (!othersMatch) return false;
+    if (v?.metadata?.disabled === true) return false;
     const qty = v.inventory_quantity ?? v.inventory ?? 0;
     return Number(qty) > 0;
   });
@@ -1437,8 +1438,10 @@ export default function ProductTemplateMobile() {
     product.variants?.[0]?.inventory ??
     0;
   const inventorySafeNum = Number(inventorySafe);
-  const inStock = inventorySafeNum > 0;
-  const maxQty = inventorySafeNum || 9999;
+  // A variant deactivated in Seller Central is never sellable, regardless of stock.
+  const variantDisabled = variant?.metadata?.disabled === true;
+  const inStock = inventorySafeNum > 0 && !variantDisabled;
+  const maxQty = variantDisabled ? 0 : (inventorySafeNum || 9999);
   const publishDate = meta.publish_date ? new Date(meta.publish_date) : null;
   const isComingSoon = publishDate && !isNaN(publishDate.getTime()) && publishDate.getTime() > Date.now();
   const variantMetafields = Array.isArray(variant?.metadata?.metafields) ? variant.metadata.metafields.filter((f) => f?.key && f?.value) : [];

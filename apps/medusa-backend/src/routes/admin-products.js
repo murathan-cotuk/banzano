@@ -326,35 +326,62 @@ const queueMetafieldSuggestionsAndSanitizePayload = async (body, sellerId) => {
   return result
 }
 
-const validateRequiredGpsrMetadata = (meta) => {
-  const m = meta && typeof meta === 'object' ? meta : {}
-  const hasManufacturer = String(m.hersteller || '').trim().length > 0
-  const hasManufacturerInfo = String(m.hersteller_information || '').trim().length > 0
-  const hasResponsiblePerson = String(m.verantwortliche_person_information || '').trim().length > 0
-  if (hasManufacturer && hasManufacturerInfo && hasResponsiblePerson) return { ok: true }
-  const missing = []
-  if (!hasManufacturer) missing.push('hersteller')
-  if (!hasManufacturerInfo) missing.push('hersteller_information')
-  if (!hasResponsiblePerson) missing.push('verantwortliche_person_information')
-  return { ok: false, message: `GPSR required fields missing: ${missing.join(', ')}` }
-}
+const GPSR_REQUIRED_KEYS = ['hersteller', 'hersteller_information', 'verantwortliche_person_information']
 
 /**
- * Each variant is its own product for compliance purposes (docs/HUKUKI.md) — when a product
- * has real variants, GPSR fields are checked per variant instead of on the shared parent
- * metadata, since sellercentral now collects hersteller/hersteller_information/
- * verantwortliche_person_information on each variant individually.
+ * Each variant is its own compliance unit (docs/HUKUKI.md), BUT an empty GPSR field on a
+ * variant auto-inherits the parent's value and is marked locked (parent_locked_fields), so
+ * a seller never retypes shared manufacturer info per variant and Excel imports that only
+ * fill the parent still produce valid variants. MUTATES variantsArr[].metadata in place.
+ *
+ * Returns { ok } when everything is covered after inheritance, otherwise
+ * { ok: false, message, detail: [{ scope, label?, option_values?, keys }] } describing what
+ * is STILL missing (i.e. the parent itself also lacks the field). Callers treat a not-ok
+ * result as a SOFT block: persist the edit, force the product to draft, surface the warning.
  */
-const validateRequiredGpsrForProduct = (metadataObj, variantsArr) => {
-  const realVariants = Array.isArray(variantsArr) ? variantsArr.filter((v) => Array.isArray(v?.option_values) && v.option_values.length > 0) : []
-  if (realVariants.length === 0) return validateRequiredGpsrMetadata(metadataObj || {})
-  const failing = []
-  for (const v of realVariants) {
-    const check = validateRequiredGpsrMetadata(v && typeof v.metadata === 'object' ? v.metadata : {})
-    if (!check.ok) failing.push(Array.isArray(v.option_values) ? v.option_values.join(' / ') : (v.title || v.sku || '—'))
+const applyGpsrInheritanceAndValidate = (metadataObj, variantsArr) => {
+  const pm = metadataObj && typeof metadataObj === 'object' ? metadataObj : {}
+  const realVariants = Array.isArray(variantsArr)
+    ? variantsArr.filter((v) => v && Array.isArray(v.option_values) && v.option_values.length > 0)
+    : []
+
+  if (realVariants.length === 0) {
+    const missing = GPSR_REQUIRED_KEYS.filter((k) => String(pm[k] || '').trim().length === 0)
+    if (missing.length === 0) return { ok: true }
+    return {
+      ok: false,
+      message: `GPSR required fields missing: ${missing.join(', ')}`,
+      detail: [{ scope: 'product', keys: missing }],
+    }
   }
-  if (failing.length === 0) return { ok: true }
-  return { ok: false, message: `GPSR required fields missing for variant(s): ${failing.join(', ')}` }
+
+  const detail = []
+  for (const v of realVariants) {
+    if (!v.metadata || typeof v.metadata !== 'object') v.metadata = {}
+    const vm = v.metadata
+    const locks = Array.isArray(vm.parent_locked_fields) ? [...vm.parent_locked_fields] : []
+    const stillMissing = []
+    for (const k of GPSR_REQUIRED_KEYS) {
+      if (String(vm[k] || '').trim().length > 0) continue
+      const parentVal = String(pm[k] || '').trim()
+      if (parentVal.length > 0) {
+        vm[k] = pm[k]
+        if (!locks.includes(k)) locks.push(k)
+      } else {
+        stillMissing.push(k)
+      }
+    }
+    if (locks.length) vm.parent_locked_fields = locks
+    if (stillMissing.length) {
+      detail.push({ scope: 'variant', label: v.option_values.join(' / '), option_values: v.option_values, keys: stillMissing })
+    }
+  }
+  if (detail.length === 0) return { ok: true }
+  return {
+    ok: false,
+    message: `GPSR required fields missing for variant(s): ${detail.map((d) => d.label).join(', ')}`,
+    detail,
+  }
 }
 
 /**
@@ -546,21 +573,33 @@ const createAdminHubProductDb = async (body) => {
     if (isPlaceholderHandle(handle)) handle = slugifyTitle(title) || ('product-' + Date.now())
     if (metaObj) patchPlaceholderTranslationHandles(metaObj, handle, slugifyTitle)
     const variantsArr = body.variants && Array.isArray(body.variants) ? body.variants : null
-    const gpsrValidation = validateRequiredGpsrForProduct(metaObj || {}, variantsArr)
-    if (!gpsrValidation.ok) { await client.end(); return { __error: gpsrValidation.message || 'GPSR validation failed' } }
+    let status = (body.status || 'draft').trim() || 'draft'
+    let complianceWarning = null
+    let complianceDetail = null
+    // Soft compliance block: empty variant GPSR fields inherit the parent (mutates variantsArr);
+    // anything still missing does NOT reject the create — it forces the product to draft + warns.
+    const gpsrValidation = applyGpsrInheritanceAndValidate(metaObj || {}, variantsArr)
+    if (!gpsrValidation.ok) {
+      complianceWarning = gpsrValidation.message
+      complianceDetail = gpsrValidation.detail || null
+      if (status.toLowerCase() === 'published') status = 'draft'
+    }
     const metadata = metaObj ? JSON.stringify(metaObj) : null
     const variants = variantsArr ? JSON.stringify(variantsArr) : null
     const eanValidation = await validateProductEansDb(client, metaObj && metaObj.ean, collectVariantEans(variantsArr || []), null)
     if (!eanValidation.ok) { await client.end(); return { __error: eanValidation.message || 'EAN validation failed' } }
-    const brandGate = await validateBrandForPublish(client, metaObj || {}, (body.status || 'draft').trim())
-    if (!brandGate.ok) { await client.end(); return { __error: brandGate.message || 'Brand authorization pending' } }
+    const brandGate = await validateBrandForPublish(client, metaObj || {}, status)
+    if (!brandGate.ok) {
+      complianceWarning = complianceWarning ? `${complianceWarning} · ${brandGate.message}` : brandGate.message
+      if (status.toLowerCase() === 'published') status = 'draft'
+    }
     const res = await client.query(
       `INSERT INTO admin_hub_products (title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id, title, handle, sku, description, status, seller_id, collection_id, price_cents, inventory, metadata, variants, created_at, updated_at`,
       [
         title, handle, (body.sku || '').trim() || null, description,
-        (body.status || 'draft').trim() || 'draft', (body.seller || body.seller_id || '').trim() || null,
+        status, (body.seller || body.seller_id || '').trim() || null,
         body.collection_id || null, price, inventory, metadata, variants,
       ]
     )
@@ -575,6 +614,7 @@ const createAdminHubProductDb = async (body) => {
       price_cents: r.price_cents, inventory: r.inventory != null ? r.inventory : 0,
       metadata: r.metadata, variants: r.variants, created_at: r.created_at, updated_at: r.updated_at,
       ...(autoTranslatedLocales.length ? { auto_translated_locales: autoTranslatedLocales } : {}),
+      ...(complianceWarning ? { compliance_warning: complianceWarning, compliance_detail: complianceDetail, compliance_downgraded: true } : {}),
     }
   } catch (e) {
     try { await client.end() } catch (_) {}
@@ -659,7 +699,7 @@ const updateAdminHubProductDb = async (id, body) => {
     let handle = body.handle !== undefined ? String(body.handle).trim() || existing.handle : existing.handle
     const sku = body.sku !== undefined ? (body.sku === '' ? null : String(body.sku).trim()) : existing.sku
     let description = body.description !== undefined ? (body.description === '' ? null : String(body.description)) : existing.description
-    const status = body.status !== undefined ? String(body.status).trim() || 'draft' : existing.status
+    let status = body.status !== undefined ? String(body.status).trim() || 'draft' : existing.status
     const price = body.price !== undefined ? Math.round(Number(body.price) * 100) : (existing.price != null ? Math.round(Number(existing.price) * 100) : 0)
     const inventory = body.inventory !== undefined ? parseInt(body.inventory, 10) || 0 : (existing.inventory ?? 0)
     let metadataObj = existing.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {}
@@ -698,15 +738,28 @@ const updateAdminHubProductDb = async (id, body) => {
     }
     handle = resolveNonPlaceholderHandle(handle, slugifyTitle(title))
     if (metadataObj) patchPlaceholderTranslationHandles(metadataObj, handle, slugifyTitle)
+    // Soft compliance block (docs/HUKUKI.md): a missing GPSR field or an unapproved brand
+    // must NEVER discard the seller's edit. Empty variant GPSR fields inherit the parent
+    // (mutates nextVariantsArr); anything still missing forces the product to draft and is
+    // returned as compliance_warning instead of a hard __error.
+    let complianceWarning = null
+    let complianceDetail = null
     if (!skipComplianceGates) {
-      const gpsrValidation = validateRequiredGpsrForProduct(metadataObj || {}, nextVariantsArr)
-      if (!gpsrValidation.ok) { await client.end(); return { __error: gpsrValidation.message || 'GPSR validation failed' } }
+      const gpsrValidation = applyGpsrInheritanceAndValidate(metadataObj || {}, nextVariantsArr)
+      if (!gpsrValidation.ok) {
+        complianceWarning = gpsrValidation.message
+        complianceDetail = gpsrValidation.detail || null
+        if (String(status || '').toLowerCase() === 'published') status = 'draft'
+      }
     }
     const eanValidation = await validateProductEansDb(client, metadataObj && metadataObj.ean, collectVariantEans(nextVariantsArr), uuid)
     if (!eanValidation.ok) { await client.end(); return { __error: eanValidation.message || 'EAN validation failed' } }
     if (!skipComplianceGates) {
       const brandGate = await validateBrandForPublish(client, metadataObj || {}, status)
-      if (!brandGate.ok) { await client.end(); return { __error: brandGate.message || 'Brand authorization pending' } }
+      if (!brandGate.ok) {
+        complianceWarning = complianceWarning ? `${complianceWarning} · ${brandGate.message}` : brandGate.message
+        if (String(status || '').toLowerCase() === 'published') status = 'draft'
+      }
     }
     const metadata = Object.keys(metadataObj).length ? JSON.stringify(metadataObj) : null
     const variants = body.variants !== undefined ? (Array.isArray(body.variants) ? JSON.stringify(body.variants) : null) : (existing.variants ? JSON.stringify(existing.variants) : null)
@@ -719,6 +772,11 @@ const updateAdminHubProductDb = async (id, body) => {
     stampComplianceReviewAsync(uuid, metadataObj).catch(() => {})
     const saved = await getAdminHubProductByIdOrHandleDb(uuid)
     if (saved && autoTranslatedLocales.length) saved.auto_translated_locales = autoTranslatedLocales
+    if (saved && complianceWarning) {
+      saved.compliance_warning = complianceWarning
+      saved.compliance_detail = complianceDetail
+      saved.compliance_downgraded = true
+    }
     return saved
   } catch (e) {
     try { await client.end() } catch (_) {}

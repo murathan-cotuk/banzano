@@ -14,6 +14,7 @@ import {
   InlineStack,
   Box,
   Banner,
+  Checkbox,
   Divider,
   Select,
   Tabs,
@@ -707,6 +708,16 @@ export default function VariantEditPage({ product: initialProduct, idOrHandle, v
         <Text as="span" variant="bodySm" tone="subdued">
           → Variant: {variantSummary}
         </Text>
+        <Button
+          size="slim"
+          variant="tertiary"
+          onClick={() => {
+            try { sessionStorage.setItem(`pe_tab_${idOrHandle}`, "2"); } catch { /* ignore */ }
+            router.push(`/products/${idOrHandle}`);
+          }}
+        >
+          {t("Back to variations", "Varyasyonlara dön", "Retour aux variantes", "Volver a variantes", "Torna alle varianti", "Zurück zu Variationen")}
+        </Button>
         <span style={{ flex: 1 }} />
         <Button size="slim" variant="primary" onClick={() => save()} loading={saving}>
           Save
@@ -1009,6 +1020,34 @@ export default function VariantEditPage({ product: initialProduct, idOrHandle, v
                   return raw ? <img src={resolveMediaUrl(raw)} alt="" style={{ maxWidth: 120, borderRadius: 8 }} /> : <Text tone="subdued">No cover</Text>;
                 })()}
               </div>
+
+              <ProductSectionRule />
+
+              <ProductSectionHeading>{t("Status", "Durum", "Statut", "Estado", "Stato", "Status")}</ProductSectionHeading>
+              <Checkbox
+                label={t(
+                  "Variant active (sellable in the shop)",
+                  "Varyant aktif (mağazada satılabilir)",
+                  "Variante active (vendable en boutique)",
+                  "Variante activa (vendible en la tienda)",
+                  "Variante attiva (vendibile nel negozio)",
+                  "Variante aktiv (im Shop verkäuflich)",
+                )}
+                checked={vm.disabled !== true}
+                onChange={(on) => patchVariant((cur) => {
+                  const m = { ...(cur.metadata && typeof cur.metadata === "object" ? cur.metadata : {}) };
+                  if (on) delete m.disabled; else m.disabled = true;
+                  return { ...cur, metadata: m };
+                })}
+                helpText={t(
+                  "When off this variant is hidden and not purchasable, even if the product is published.",
+                  "Kapalıyken bu varyant gizlenir ve satın alınamaz — ürün yayında olsa bile.",
+                  "Désactivée, cette variante est masquée et non achetable, même si le produit est publié.",
+                  "Si está desactivada, esta variante se oculta y no se puede comprar, aunque el producto esté publicado.",
+                  "Se disattivata, questa variante è nascosta e non acquistabile, anche se il prodotto è pubblicato.",
+                  "Wenn aus, ist diese Variante ausgeblendet und nicht kaufbar, auch bei veröffentlichtem Produkt.",
+                )}
+              />
 
               <ProductSectionRule />
 

@@ -574,6 +574,13 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
   const [variantImgPickerTarget, setVariantImgPickerTarget] = useState(null);
   // Swatch image picker: null = closed, {gi, oi} = target group/option
   const [swatchPickerTarget, setSwatchPickerTarget] = useState(null);
+  // Variation matrix: selected row keys (option_values joined) + bulk-edit modal
+  const [selectedVariantKeys, setSelectedVariantKeys] = useState(() => new Set());
+  const [bulkVariantOpen, setBulkVariantOpen] = useState(false);
+  const [bulkVariantCfg, setBulkVariantCfg] = useState({});
+  // After a save that was blocked/downgraded: field paths to outline red + jump to
+  const [saveErrorFields, setSaveErrorFields] = useState([]);
+  const [saveErrorListOpen, setSaveErrorListOpen] = useState(false);
   // Draft price strings keyed by `${variantKey}_${field}` — committed on blur
   const [priceInputs, setPriceInputs] = useState({});
   const priceInputsRef = useRef({});
@@ -604,7 +611,17 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
   const [extraVisibleMetaDefKeys, setExtraVisibleMetaDefKeys] = useState({});
   const [addMetaDefPopoverOpen, setAddMetaDefPopoverOpen] = useState(false);
   const [classificationOpen, setClassificationOpen] = useState(false);
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const tabStorageKey = `pe_tab_${idOrHandle || "new"}`;
+  const [activeTabIndex, setActiveTabIndex] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    try {
+      const n = parseInt(sessionStorage.getItem(tabStorageKey) || "", 10);
+      return Number.isFinite(n) && n >= 0 && n <= 3 ? n : 0;
+    } catch { return 0; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(tabStorageKey, String(activeTabIndex)); } catch { /* ignore */ }
+  }, [activeTabIndex, tabStorageKey]);
   /** Neues Katalog-Metafeld (Titel + Wert); Seller → Freigabe durch Superuser */
   const [newCatalogMetaOpen, setNewCatalogMetaOpen] = useState(false);
   const [newCatalogMetaLabel, setNewCatalogMetaLabel] = useState("");
@@ -1440,26 +1457,44 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         setActiveTabIndex(2);
         return false;
       }
+      // Soft GPSR gate: missing required fields must NEVER discard the seller's work.
+      // The product is saved as a draft (never left/made "published") and the seller is
+      // warned instead. The backend enforces the same rule and can also downgrade.
       const gpsrMissing = [];
       if (!String(metadata.hersteller || "").trim()) gpsrMissing.push("Hersteller");
       if (!String(metadata.hersteller_information || "").trim()) gpsrMissing.push("Hersteller-Informationen");
       if (!String(metadata.verantwortliche_person_information || "").trim()) gpsrMissing.push("Verantwortliche Person (EU)");
+      let effectiveStatus = nextStatus;
+      let softComplianceWarning = "";
       if (gpsrMissing.length > 0) {
-        setMessage({
-          type: "warning",
-          text: lt(
-            locale,
-            `Fill in these GPSR fields to save: ${gpsrMissing.join(", ")}`,
-            `Kaydetmek için GPSR alanlarını doldurun: ${gpsrMissing.join(", ")}`,
-            `Remplissez ces champs GPSR pour enregistrer : ${gpsrMissing.join(", ")}`,
-            `Complete estos campos GPSR para guardar: ${gpsrMissing.join(", ")}`,
-            `Compila questi campi GPSR per salvare: ${gpsrMissing.join(", ")}`,
-            `Bitte folgende GPSR-Felder ausfüllen, um zu speichern: ${gpsrMissing.join(", ")}`,
-          ),
-        });
-        setActiveTabIndex(3);
-        return false;
+        if (String(effectiveStatus).toLowerCase() === "published") effectiveStatus = "draft";
+        softComplianceWarning = lt(
+          locale,
+          `Saved as draft — fill these GPSR fields to publish: ${gpsrMissing.join(", ")}`,
+          `Taslak olarak kaydedildi — yayınlamak için şu GPSR alanlarını doldurun: ${gpsrMissing.join(", ")}`,
+          `Enregistré en brouillon — remplissez ces champs GPSR pour publier : ${gpsrMissing.join(", ")}`,
+          `Guardado como borrador — complete estos campos GPSR para publicar: ${gpsrMissing.join(", ")}`,
+          `Salvato come bozza — compila questi campi GPSR per pubblicare: ${gpsrMissing.join(", ")}`,
+          `Als Entwurf gespeichert — diese GPSR-Felder für die Veröffentlichung ausfüllen: ${gpsrMissing.join(", ")}`,
+        );
       }
+      // Build the "jump to the error" list: parent GPSR gaps (Legal tab) + variants still
+      // missing GPSR after parent inheritance (Variants tab).
+      const errList = [];
+      if (gpsrMissing.length > 0) {
+        errList.push({ tab: 3, anchor: "gpsr-fields", label: `GPSR — ${gpsrMissing.join(", ")}` });
+      }
+      (product.variants || []).forEach((vv) => {
+        if (Array.isArray(vv.option_values) && vv.option_values.length > 0 && !variantGpsrOk(vv)) {
+          errList.push({
+            tab: 2,
+            anchor: "vm-matrix",
+            label: lt(locale, "Variant", "Varyant", "Variante", "Variante", "Variante", "Variante") + ": " + vv.option_values.join(" / ") + " — GPSR",
+          });
+        }
+      });
+      setSaveErrorFields(errList);
+      setSaveErrorListOpen(false);
       const collectionId = (metadata.collection_ids && metadata.collection_ids[0]) || product.collection_id || null;
       // Canonical title = DE locale (for backward compat with shop)
       const canonicalTitle = isPlaceholderProductTitle(metadata.translations?.de?.title)
@@ -1475,7 +1510,7 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         handle: canonicalHandle,
         sku: product.sku || "",
         description: canonicalDescription,
-        status: nextStatus,
+        status: effectiveStatus,
         price: dePriceCents / 100,
         inventory: product.inventory ?? 0,
         metadata,
@@ -1501,7 +1536,12 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
             });
           }
         } else {
-          setMessage({ type: "success", text: withAutoTranslateNote(locale === "en" ? "Product created." : locale === "tr" ? "Ürün oluşturuldu." : locale === "fr" ? "Produit créé." : locale === "es" ? "Producto creado." : locale === "it" ? "Prodotto creato." : "Produkt erstellt.", locale, res?.product?.auto_translated_locales || created?.auto_translated_locales) });
+          const backendComplianceWarning = created?.compliance_warning || res?.product?.compliance_warning || "";
+          if (backendComplianceWarning || softComplianceWarning) {
+            setMessage({ type: "warning", text: backendComplianceWarning || softComplianceWarning });
+          } else {
+            setMessage({ type: "success", text: withAutoTranslateNote(locale === "en" ? "Product created." : locale === "tr" ? "Ürün oluşturuldu." : locale === "fr" ? "Produit créé." : locale === "es" ? "Producto creado." : locale === "it" ? "Prodotto creato." : "Produkt erstellt.", locale, res?.product?.auto_translated_locales || created?.auto_translated_locales) });
+          }
         }
         onReload?.();
         if (created?.id) {
@@ -1564,11 +1604,17 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       const autoNoteLocales = updatedRaw?.listing_saved || updatedRaw?.suggestion_submitted
         ? []
         : (updatedRaw?.product?.auto_translated_locales || savedProduct?.auto_translated_locales);
-      setMessage({ type: "success", text: withAutoTranslateNote((updatedRaw?.listing_saved
-        ? (updatedRaw?.suggestion_submitted
-            ? changeRequestSubmittedMsg
-            : (locale === "en" ? "Price, inventory and own data saved." : locale === "tr" ? "Fiyat, stok ve özel veriler kaydedildi." : locale === "fr" ? "Prix, stock et données propres enregistrés." : locale === "es" ? "Precio, inventario y datos propios guardados." : locale === "it" ? "Prezzo, inventario e dati propri salvati." : "Preis, Bestand und eigene Daten gespeichert."))
-        : ui.saved) + (updatedRaw?.suggestion_submitted ? "" : cacheDelayNote), locale, autoNoteLocales) });
+      const backendComplianceWarning = resolvedProduct?.compliance_warning || updatedRaw?.product?.compliance_warning || "";
+      if (backendComplianceWarning || softComplianceWarning) {
+        // Work was saved (as draft) — surface what still blocks publishing instead of a plain success.
+        setMessage({ type: "warning", text: backendComplianceWarning || softComplianceWarning });
+      } else {
+        setMessage({ type: "success", text: withAutoTranslateNote((updatedRaw?.listing_saved
+          ? (updatedRaw?.suggestion_submitted
+              ? changeRequestSubmittedMsg
+              : (locale === "en" ? "Price, inventory and own data saved." : locale === "tr" ? "Fiyat, stok ve özel veriler kaydedildi." : locale === "fr" ? "Prix, stock et données propres enregistrés." : locale === "es" ? "Precio, inventario y datos propios guardados." : locale === "it" ? "Prezzo, inventario e dati propri salvati." : "Preis, Bestand und eigene Daten gespeichert."))
+          : ui.saved) + (updatedRaw?.suggestion_submitted ? "" : cacheDelayNote), locale, autoNoteLocales) });
+      }
       await refetchPendingChangeRequests(savedProduct.id);
       onReload?.();
       return true;
@@ -1873,7 +1919,11 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
 
     setProduct((prev) => {
       const existing = prev?.variants || [];
-      const flat = combos.map((optionValues) => {
+      // Only rebuild the variant matrix once EVERY group has at least one option value.
+      // While a group is still being configured (just added, name typed, no options yet),
+      // keep the existing variant rows untouched — regenerating with an empty cartesian
+      // used to wipe every variant and its SKU/EAN/price/compliance data.
+      const flat = !allFilled ? existing : combos.map((optionValues) => {
         const key = optionValues.join("\u0000");
         const ex = existing.find(
           (v) => Array.isArray(v.option_values) && v.option_values.join("\u0000") === key
@@ -1893,7 +1943,9 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         };
       });
       const metaGroups = nextGroups.map((g) => ({
-        name: g.name || "Option",
+        // Keep an unnamed group blank while editing (field shows its placeholder, the
+        // matrix falls back to "G1/G2") — handleSave coerces empty names to "Option".
+        name: g.name || "",
         ...(g.metafield_key ? { metafield_key: g.metafield_key } : {}),
         options: (g.options || []).map((o) => {
           const row = {
@@ -1964,6 +2016,144 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       else m[metaKey] = value;
       variants[idx] = { ...cur, metadata: m };
       return { ...prev, variants };
+    });
+  };
+
+  // ─── Variation matrix: row selection, bulk parent-lock, row delete, deactivate ──
+  const variantRowKey = (v) => (Array.isArray(v?.option_values) ? v.option_values.join("") : "");
+  const toggleVariantSelected = (key) =>
+    setSelectedVariantKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  const setAllVariantsSelected = (keys, on) =>
+    setSelectedVariantKeys(() => (on ? new Set(keys) : new Set()));
+
+  /** GPSR complete for a variant = all 3 fields present in its own metadata OR locked to a
+   *  parent that has them (backend materialises locked fields on save). */
+  const variantGpsrOk = (v) => {
+    const m = v?.metadata && typeof v.metadata === "object" ? v.metadata : {};
+    const pm = product?.metadata && typeof product.metadata === "object" ? product.metadata : {};
+    const locks = Array.isArray(m.parent_locked_fields) ? m.parent_locked_fields : [];
+    return ["hersteller", "hersteller_information", "verantwortliche_person_information"].every(
+      (k) => String(m[k] || "").trim() !== "" || (locks.includes(k) && String(pm[k] || "").trim() !== "")
+    );
+  };
+
+  const removeMatrixVariant = (optionValues) => {
+    const key = Array.isArray(optionValues) ? optionValues.join(" ") : "";
+    setProduct((prev) => {
+      if (!prev) return prev;
+      const variants = (prev.variants || []).filter(
+        (v) => !(Array.isArray(v.option_values) && v.option_values.join(" ") === key)
+      );
+      return { ...prev, variants };
+    });
+    setSelectedVariantKeys((prev) => {
+      const next = new Set(prev);
+      next.delete((optionValues || []).join(""));
+      return next;
+    });
+    unsaved?.setDirty(true);
+  };
+
+  const toggleMatrixVariantDisabled = (optionValues, disabled) =>
+    updateMatrixVariantMeta(optionValues, "disabled", disabled ? true : null);
+
+  // Fields a matrix variant can copy from / lock to the parent (mirrors VariantEditPage).
+  const BULK_PARENT_FIELDS = [
+    { key: "hersteller", kind: "text" },
+    { key: "hersteller_information", kind: "text", multiline: true },
+    { key: "verantwortliche_person_information", kind: "text", multiline: true },
+    { key: "eu_origin_country", kind: "text" },
+    { key: "eu_origin_registry_id", kind: "text" },
+    { key: "eu_origin_document_url", kind: "text" },
+    { key: "category_id", kind: "lockonly" },
+    { key: "brand_id", kind: "lockonly" },
+    { key: "spezifikationen", kind: "lockonly" },
+    { key: "metafields", kind: "lockonly" },
+  ];
+  const SPEZ_LOCK_KEYS = [
+    "dimensions_width", "dimensions_height", "dimensions_length", "weight_grams",
+    "sales_unit", "packaging_unit", "packaging_unit_plural", "unit_type", "unit_value", "unit_reference",
+  ];
+  const bulkFieldLabel = (key) => {
+    switch (key) {
+      case "hersteller": return lt(locale, "Manufacturer", "Üretici", "Fabricant", "Fabricante", "Fabbricante", "Hersteller");
+      case "hersteller_information": return lt(locale, "Manufacturer details", "Üretici bilgileri", "Coordonnées du fabricant", "Datos del fabricante", "Dati del fabbricante", "Herstellerinformationen");
+      case "verantwortliche_person_information": return lt(locale, "Responsible person (EU)", "Sorumlu kişi (AB)", "Personne responsable (UE)", "Persona responsable (UE)", "Persona responsabile (UE)", "Verantwortliche Person (EU)");
+      case "eu_origin_country": return lt(locale, "EU origin — country", "AB menşe — ülke", "Origine UE — pays", "Origen UE — país", "Origine UE — paese", "EU-Herkunft — Land");
+      case "eu_origin_registry_id": return lt(locale, "EU origin — registry ID", "AB menşe — kayıt no", "Origine UE — n° registre", "Origen UE — ID registro", "Origine UE — ID registro", "EU-Herkunft — Registernr.");
+      case "eu_origin_document_url": return lt(locale, "EU origin — document URL", "AB menşe — belge URL", "Origine UE — URL doc", "Origen UE — URL doc", "Origine UE — URL doc", "EU-Herkunft — Dokument-URL");
+      case "category_id": return lt(locale, "Category", "Kategori", "Catégorie", "Categoría", "Categoria", "Kategorie");
+      case "brand_id": return lt(locale, "Brand", "Marka", "Marque", "Marca", "Marca", "Marke");
+      case "spezifikationen": return lt(locale, "Specifications (dimensions, units)", "Özellikler (ölçü, birim)", "Spécifications", "Especificaciones", "Specifiche", "Spezifikationen (Maße, Einheiten)");
+      case "metafields": return lt(locale, "Properties (metafields)", "Özellikler (metafield)", "Propriétés", "Propiedades", "Proprietà", "Eigenschaften (Metafelder)");
+      default: return key;
+    }
+  };
+  const bulkVariantHasChanges = BULK_PARENT_FIELDS.some((f) => {
+    const c = bulkVariantCfg[f.key];
+    return c && (c.lock || (f.kind === "text" && String(c.value || "").trim() !== ""));
+  });
+
+  /** Apply the bulk-edit config to every selected matrix variant (local state; Save persists). */
+  const applyBulkVariantEdit = () => {
+    const keySet = selectedVariantKeys;
+    if (!keySet.size) return;
+    setProduct((prev) => {
+      if (!prev) return prev;
+      const pm = prev.metadata && typeof prev.metadata === "object" ? prev.metadata : {};
+      const copyKey = (m, k) => {
+        if (pm[k] === "" || pm[k] == null) delete m[k]; else m[k] = pm[k];
+      };
+      const variants = (prev.variants || []).map((v) => {
+        if (!keySet.has(variantRowKey(v))) return v;
+        const m = { ...(v.metadata && typeof v.metadata === "object" ? v.metadata : {}) };
+        const locks = new Set(Array.isArray(m.parent_locked_fields) ? m.parent_locked_fields : []);
+        let touched = false;
+        for (const f of BULK_PARENT_FIELDS) {
+          const cfg = bulkVariantCfg[f.key];
+          if (!cfg) continue;
+          if (cfg.lock) {
+            locks.add(f.key);
+            if (f.key === "category_id") {
+              copyKey(m, "category_id"); copyKey(m, "admin_category_id"); copyKey(m, "category_ids"); copyKey(m, "category_slug");
+            } else if (f.key === "spezifikationen") {
+              SPEZ_LOCK_KEYS.forEach((sk) => copyKey(m, sk));
+            } else if (f.key === "metafields") {
+              if (pm.metafields != null) m.metafields = JSON.parse(JSON.stringify(pm.metafields)); else delete m.metafields;
+            } else {
+              copyKey(m, f.key);
+            }
+            touched = true;
+          } else if (f.kind === "text" && String(cfg.value || "").trim() !== "") {
+            locks.delete(f.key);
+            m[f.key] = String(cfg.value).trim();
+            touched = true;
+          }
+        }
+        if (!touched) return v;
+        if (locks.size) m.parent_locked_fields = [...locks]; else delete m.parent_locked_fields;
+        return { ...v, metadata: m };
+      });
+      return { ...prev, variants };
+    });
+    unsaved?.setDirty(true);
+    setBulkVariantOpen(false);
+    setBulkVariantCfg({});
+    setMessage({
+      type: "success",
+      text: lt(
+        locale,
+        `${selectedVariantKeys.size} variant(s) updated — click Save to apply.`,
+        `${selectedVariantKeys.size} varyant güncellendi — uygulamak için Kaydet'e tıklayın.`,
+        `${selectedVariantKeys.size} variante(s) mise(s) à jour — cliquez sur Enregistrer.`,
+        `${selectedVariantKeys.size} variante(s) actualizada(s) — pulsa Guardar.`,
+        `${selectedVariantKeys.size} variante aggiornate — clicca Salva.`,
+        `${selectedVariantKeys.size} Variante(n) aktualisiert — zum Übernehmen auf Speichern klicken.`,
+      ),
     });
   };
 
@@ -2285,32 +2475,52 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         .vg-swatch:hover { border-color: var(--p-color-border-hover); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); }
         .vg-swatch-empty { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; border: 1.5px dashed var(--p-color-border); display: inline-flex; align-items: center; justify-content: center; color: var(--p-color-icon-subdued); font-size: 11px; cursor: pointer; padding: 0; background: none; appearance: none; }
         .vg-swatch-empty:hover { border-color: var(--p-color-border-info); background: rgba(0,113,227,0.04); }
-        /* ── Variation engine — Matrix rows (always expanded, full-width) ── */
-        .vm-card { border: 1px solid var(--p-color-border); border-radius: 10px; margin-bottom: 10px; background: var(--p-color-bg-surface-secondary, #f6f6f7); overflow: hidden; }
-        .vm-card:last-child { margin-bottom: 0; }
-        .vm-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 18px; padding: 14px 16px; }
-        .vm-row-main { display: flex; align-items: flex-start; gap: 12px; flex: 1 1 220px; min-width: 180px; }
-        .vm-thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid var(--p-color-border); display: block; flex-shrink: 0; }
-        .vm-thumb-empty { width: 48px; height: 48px; border-radius: 8px; border: 1.5px dashed var(--p-color-border); background: #fff; display: flex; align-items: center; justify-content: center; color: var(--p-color-icon-subdued); font-size: 16px; flex-shrink: 0; }
-        .vm-badge { display: inline-flex; align-items: center; gap: 5px; background: #fff; border: 1px solid var(--p-color-border); border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 500; color: var(--p-color-text); white-space: nowrap; }
-        .vm-field-group { flex: 1 1 200px; min-width: 160px; }
-        .vm-field-group.vm-prices { flex: 1 1 280px; }
-        .vm-field-group.vm-images { flex: 1 1 220px; }
-        .vm-sub-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--p-color-text-subdued); margin-bottom: 8px; }
-        .vm-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-        .vm-img-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-        .vm-img-item { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
-        .vm-img-item img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--p-color-border); display: block; }
-        .vm-img-del { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-        .vm-img-del:hover { background: rgba(200,0,0,.8); }
-        .vm-img-add { width: 56px; height: 56px; border-radius: 8px; border: 2px dashed var(--p-color-border); background: #fff; cursor: pointer; font-size: 20px; color: var(--p-color-text-subdued); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color .12s, color .12s; }
+        /* ── Variation engine — Matrix rows (compact single line) ── */
+        .vm-list { border: 1px solid var(--p-color-border); border-radius: 10px; overflow: hidden; background: var(--p-color-bg-surface, #fff); }
+        .vm-head, .vm-row { display: flex; align-items: center; gap: 10px; padding: 7px 12px; }
+        .vm-head { background: var(--p-color-bg-surface-secondary, #f6f6f7); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--p-color-text-subdued); border-bottom: 1px solid var(--p-color-border); }
+        .vm-row { border-top: 1px solid var(--p-color-border); flex-wrap: wrap; }
+        .vm-row:first-child { border-top: none; }
+        .vm-row.vm-row-selected { background: var(--p-color-bg-surface-selected, #f2f7fe); }
+        .vm-row.vm-row-off { opacity: .55; }
+        .vm-check { flex: 0 0 auto; display: flex; align-items: center; }
+        .vm-sku { flex: 0 0 auto; width: 200px; }
+        .vm-opts { flex: 1 1 180px; min-width: 130px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .vm-opt { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--p-color-text); background: var(--p-color-bg-surface-secondary, #f1f1f1); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+        .vm-opt i { font-style: normal; color: var(--p-color-text-subdued); }
+        .vm-nums { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+        .vm-f { display: flex; flex-direction: column; gap: 1px; }
+        .vm-f > span { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--p-color-text-subdued); padding-left: 3px; }
+        .vm-inp { width: 100%; border: 1px solid transparent; border-radius: 6px; background: transparent; padding: 5px 7px; font-size: 13px; color: var(--p-color-text); font-variant-numeric: tabular-nums; box-sizing: border-box; }
+        .vm-inp::placeholder { color: var(--p-color-text-disabled, #b5b5b5); }
+        .vm-inp:hover { background: var(--p-color-bg-fill-transparent-hover, rgba(0,0,0,.04)); }
+        .vm-inp:focus { outline: none; border-color: var(--p-color-border-emphasis, #2c6ecb); background: var(--p-color-bg-surface, #fff); }
+        .vm-inp.vm-err { border-color: var(--p-color-border-critical, #d82c0d); background: var(--p-color-bg-surface-critical, #fff4f4); }
+        .vm-inp-sku { font-weight: 600; }
+        .vm-inp-n { width: 82px; text-align: right; }
+        .vm-flag { flex: 0 0 auto; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 5px; cursor: help; }
+        .vm-flag-bad { color: var(--p-color-text-critical, #b42318); background: var(--p-color-bg-surface-critical, #fff0f0); }
+        .vm-imgs { flex: 0 0 auto; display: flex; gap: 5px; align-items: center; margin-left: auto; }
+        .vm-img { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
+        .vm-img img { width: 40px; height: 40px; object-fit: cover; border-radius: 7px; border: 1px solid var(--p-color-border); display: block; }
+        .vm-img-x { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+        .vm-img-x:hover { background: rgba(200,0,0,.85); }
+        .vm-img-add { width: 40px; height: 40px; border-radius: 7px; border: 1.5px dashed var(--p-color-border); background: transparent; cursor: pointer; font-size: 15px; color: var(--p-color-text-subdued); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .vm-img-add:hover { border-color: var(--p-color-border-hover); color: var(--p-color-text); }
-        .vm-edit-btn { flex-shrink: 0; align-self: center; }
+        .vm-rowbtn { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent; background: transparent; cursor: pointer; color: var(--p-color-text-subdued); display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; padding: 0; }
+        .vm-rowbtn:hover { background: var(--p-color-bg-fill-transparent-hover, rgba(0,0,0,.06)); color: var(--p-color-text); }
+        .vm-rowbtn.vm-rowbtn-danger:hover { background: var(--p-color-bg-surface-critical, #fff0f0); color: var(--p-color-text-critical, #b42318); }
+        .vm-field-err { border: 1px solid var(--p-color-border-critical, #d82c0d) !important; border-radius: 8px; }
         .variations-fullwidth { width: 100%; }
         .variations-fullwidth .Polaris-ShadowBevel { width: 100%; }
-        @media (max-width: 900px) {
-          .vm-grid-3 { grid-template-columns: 1fr; }
+        @media (max-width: 940px) {
+          .vm-row { align-items: flex-start; }
+          .vm-sku { width: 100%; }
+          .vm-imgs { margin-left: 0; }
         }
+        .mp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+        .mp-grid > * { min-width: 0; }
+        @media (max-width: 720px) { .mp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .checkbox-container { cursor: pointer; flex-shrink: 0; }
         .checkbox-container input { display: none; }
         .checkbox-container svg { overflow: visible; display: block; }
@@ -2322,10 +2532,55 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
         <Box paddingBlockEnd="200">
           <Banner
             tone={message.type === "success" ? "success" : message.type === "warning" ? "warning" : "critical"}
-            onDismiss={() => setMessage({ type: "", text: "" })}
+            onDismiss={() => { setMessage({ type: "", text: "" }); setSaveErrorFields([]); }}
           >
             {message.text}
           </Banner>
+        </Box>
+      )}
+
+      {saveErrorFields.length > 0 && (
+        <Box paddingBlockEnd="200">
+          <div style={{ border: "1px solid var(--p-color-border-critical, #d82c0d)", borderRadius: 8, padding: "8px 12px", background: "var(--p-color-bg-surface-critical, #fff4f4)" }}>
+            <Text as="p" variant="bodySm" fontWeight="semibold" tone="critical">
+              {lt(locale, "Where the required fields are missing:", "Zorunlu alanların eksik olduğu yerler:", "Où les champs obligatoires manquent :", "Dónde faltan los campos obligatorios:", "Dove mancano i campi obbligatori:", "Wo Pflichtfelder fehlen:")}
+            </Text>
+            {(saveErrorListOpen ? saveErrorFields : saveErrorFields.slice(0, 1)).map((f, idx) => (
+              <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                <span style={{ color: "var(--p-color-text-critical, #b42318)", fontSize: 13, flex: 1 }}>• {f.label}</span>
+                <Button
+                  size="micro"
+                  onClick={() => {
+                    setActiveTabIndex(f.tab);
+                    setTimeout(() => {
+                      try { document.getElementById(f.anchor)?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* ignore */ }
+                    }, 80);
+                  }}
+                >
+                  {lt(locale, "Go to error", "Hataya git", "Aller à l'erreur", "Ir al error", "Vai all'errore", "Zum Fehler")}
+                </Button>
+              </div>
+            ))}
+            {saveErrorFields.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setSaveErrorListOpen((o) => !o)}
+                style={{ background: "none", border: "none", color: "var(--p-color-text-critical, #b42318)", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 0 0" }}
+              >
+                {saveErrorListOpen
+                  ? lt(locale, "▴ Show less", "▴ Daha az göster", "▴ Voir moins", "▴ Ver menos", "▴ Mostra meno", "▴ Weniger anzeigen")
+                  : lt(
+                      locale,
+                      `▾ Show ${saveErrorFields.length - 1} more`,
+                      `▾ ${saveErrorFields.length - 1} tane daha göster`,
+                      `▾ Voir ${saveErrorFields.length - 1} de plus`,
+                      `▾ Ver ${saveErrorFields.length - 1} más`,
+                      `▾ Mostra altri ${saveErrorFields.length - 1}`,
+                      `▾ ${saveErrorFields.length - 1} weitere anzeigen`,
+                    )}
+              </button>
+            )}
+          </div>
         </Box>
       )}
 
@@ -2899,49 +3154,6 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                 }}
               />
 
-              {/* ── Variant image picker (multiple) ── */}
-              <MediaPickerModal
-                open={variantImgPickerTarget !== null}
-                onClose={() => setVariantImgPickerTarget(null)}
-                title={
-                  variantImgPickerTarget
-                    ? `${locale === "en" ? "Images" : locale === "tr" ? "Görseller" : locale === "fr" ? "Images" : locale === "es" ? "Imágenes" : locale === "it" ? "Immagini" : "Bilder"} — ${variantImgPickerTarget.join(" / ")}`
-                    : (locale === "en" ? "Variant images" : locale === "tr" ? "Varyant görselleri" : locale === "fr" ? "Images variante" : locale === "es" ? "Imágenes de variante" : locale === "it" ? "Immagini variante" : "Variantenbilder")
-                }
-                multiple={true}
-                uploadPurpose="product"
-                onSelect={(urls) => {
-                  if (!variantImgPickerTarget || !urls.length) {
-                    setVariantImgPickerTarget(null);
-                    return;
-                  }
-                  const row = (product?.variants || []).find(
-                    (v) =>
-                      Array.isArray(v.option_values) &&
-                      v.option_values.join("\u0000") === variantImgPickerTarget.join("\u0000")
-                  );
-                  const existing = Array.isArray(row?.metadata?.media) ? row.metadata.media : [];
-                  const merged = [...existing, ...urls].slice(0, 8);
-                  updateMatrixVariantMeta(variantImgPickerTarget, "media", merged);
-                  setVariantImgPickerTarget(null);
-                }}
-              />
-
-              {/* ── Swatch image picker ── */}
-              <MediaPickerModal
-                open={swatchPickerTarget !== null}
-                onClose={() => setSwatchPickerTarget(null)}
-                title={swatchPickerTarget
-                  ? `Swatch — "${variantGroups[swatchPickerTarget.gi]?.options?.[swatchPickerTarget.oi]?.value || "option"}"`
-                  : (locale === "en" ? "Swatch image" : locale === "tr" ? "Swatch görseli" : locale === "fr" ? "Image swatch" : locale === "es" ? "Imagen swatch" : locale === "it" ? "Immagine swatch" : "Swatch-Bild")}
-                multiple={false}
-                onSelect={(urls) => {
-                  if (swatchPickerTarget && urls[0]) {
-                    vg_setOption(swatchPickerTarget.gi, swatchPickerTarget.oi, "swatch_image", urls[0]);
-                  }
-                  setSwatchPickerTarget(null);
-                }}
-              />
 
             </BlockStack>
             </div>
@@ -3301,7 +3513,7 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
       <Layout>
         <Layout.Section>
               {/* Variations — directly after Media so they are not buried under GPSR/SEO */}
-          <div className="variations-fullwidth">
+          <div className="variations-fullwidth" id="vm-matrix">
             <Card>
               <BlockStack gap="400">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -3487,165 +3699,162 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                   if (matrixRows.length === 0) {
                     return (
                       <div style={{ padding: "12px 16px", background: "var(--p-color-bg-surface-warning, #fffbeb)", borderRadius: 8, fontSize: 13, color: "var(--p-color-text-subdued)" }}>
-                        Add at least one option to each group to generate combinations.
+                        {lt(locale, "Add at least one option to each group to generate combinations.", "Kombinasyon oluşması için her gruba en az bir seçenek ekleyin.", "Ajoutez au moins une option à chaque groupe pour générer des combinaisons.", "Añade al menos una opción a cada grupo para generar combinaciones.", "Aggiungi almeno un'opzione a ogni gruppo per generare le combinazioni.", "Fügen Sie jeder Gruppe mindestens eine Option hinzu, um Kombinationen zu erzeugen.")}
                       </div>
                     );
                   }
+                  const matrixKeys = matrixRows.map((v) => variantRowKey(v));
+                  const allSel = matrixKeys.length > 0 && matrixKeys.every((k) => selectedVariantKeys.has(k));
+                  const someSel = matrixKeys.some((k) => selectedVariantKeys.has(k));
+                  const gpsrBad = matrixRows.filter((v) => !variantGpsrOk(v)).length;
                   return (
                     <div>
-                      <div style={{ marginBottom: 10 }}>
+                      <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                         <Text as="p" variant="bodySm" fontWeight="semibold">
                           {pe.variationMatrix} — {matrixRows.length} {pe.variantWord(matrixRows.length)}
                         </Text>
+                        {gpsrBad > 0 && (
+                          <span className="vm-flag vm-flag-bad">
+                            {lt(locale, gpsrBad + " without GPSR", gpsrBad + " GPSR eksik", gpsrBad + " sans GPSR", gpsrBad + " sin GPSR", gpsrBad + " senza GPSR", gpsrBad + " ohne GPSR")}
+                          </span>
+                        )}
+                        <div style={{ flex: 1 }} />
+                        {selectedVariantKeys.size > 0 && (
+                          <>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {lt(locale, selectedVariantKeys.size + " selected", selectedVariantKeys.size + " seçili", selectedVariantKeys.size + " sélectionné(s)", selectedVariantKeys.size + " seleccionado(s)", selectedVariantKeys.size + " selezionati", selectedVariantKeys.size + " ausgewählt")}
+                            </Text>
+                            <Button size="slim" onClick={() => { setBulkVariantCfg({}); setBulkVariantOpen(true); }}>
+                              {lt(locale, "Bulk edit", "Toplu düzenle", "Édition groupée", "Edición masiva", "Modifica in blocco", "Sammelbearbeitung")}
+                            </Button>
+                          </>
+                        )}
                       </div>
-                      <div>
+                      <div className="vm-list">
+                        <div className="vm-head">
+                          <span className="vm-check">
+                            <Checkbox label="" labelHidden checked={allSel ? true : (someSel ? "indeterminate" : false)} onChange={(on) => setAllVariantsSelected(matrixKeys, on)} />
+                          </span>
+                          <span className="vm-sku">SKU</span>
+                          <span className="vm-opts">{lt(locale, "Variant", "Varyant", "Variante", "Variante", "Variante", "Variante")}</span>
+                          <span style={{ marginLeft: "auto" }}>EAN · {pe.inventory} · {pe.sellingPrice}</span>
+                        </div>
                         {matrixRows.map((v, vi) => {
+                          const rk = variantRowKey(v);
+                          const isSel = selectedVariantKeys.has(rk);
+                          const isOff = v?.metadata?.disabled === true;
                           const variantImgs = Array.isArray(v.metadata?.media) ? v.metadata.media : [];
                           const localeVariantImg =
                             String(locale).toLowerCase() === "de"
                               ? v.image_url || ""
                               : v.image_urls?.[locale] || v.image_url || "";
-                          const thumbUrl = variantImgs[0]
-                            ? resolveMediaUrl(variantImgs[0])
-                            : localeVariantImg
-                              ? resolveMediaUrl(localeVariantImg)
-                              : null;
-                          const vkey = Array.isArray(v.option_values) ? v.option_values.join("\u0000") : "";
-                          const mkDraftKey = (f) => `${vkey}_${f}`;
-                          const priceFields = [
-                            { f: "compare_at_price", centsKey: "compare_at_price_cents", label: pe.uvp,           placeholder: "—" },
-                            { f: "price",            centsKey: "price_cents",            label: pe.sellingPrice,  placeholder: "0.00" },
-                            { f: "sale_price",       centsKey: "sale_price_cents",       label: pe.discountPrice, placeholder: "—" },
+                          const eanErr = String(v.ean || "").trim() === "";
+                          const priceCfg = [
+                            { f: "price", centsKey: "price_cents", ph: "0.00" },
+                            { f: "sale_price", centsKey: "sale_price_cents", ph: "—" },
                           ];
-    
                           return (
-                            <div key={vi} className="vm-card">
-                              <div className="vm-row">
-                                <div className="vm-row-main">
-                                  {thumbUrl
-                                    ? <img src={thumbUrl} alt="" className="vm-thumb" />
-                                    : <div className="vm-thumb-empty">+</div>
-                                  }
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: 1 }}>
-                                    {(v.option_values || []).map((val, oi) => {
-                                      const gOpt = variantGroups[oi];
-                                      const opt = (gOpt?.options || []).find(
-                                        (o) => String(o.value || "").trim().toLowerCase() === String(val || "").trim().toLowerCase()
-                                      );
-                                      const label = opt ? optionDisplayLabel(opt, locale) : val;
-                                      const swatchUrl = opt?.swatch_image;
-                                      return (
-                                        <span key={oi} className="vm-badge">
-                                          {swatchUrl && (
-                                            <span style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block", backgroundImage: `url(${resolveMediaUrl(swatchUrl)})`, backgroundSize: "cover", border: "1px solid var(--p-color-border)", flexShrink: 0 }} />
-                                          )}
-                                          <span style={{ fontSize: 11, color: "var(--p-color-text-subdued)", marginRight: 2 }}>{getGroupDisplayName(oi) || gOpt?.name || `G${oi + 1}`}:</span>
-                                          {label}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-    
-                                <div className="vm-field-group">
-                                  <div className="vm-sub-label">{pe.inventoryIds}</div>
-                                  <div className="vm-grid-3">
-                                    <TextField label="SKU" value={v.sku ?? ""} onChange={(val) => updateMatrixVariant(v.option_values, "sku", val)} placeholder="SKU" autoComplete="off" />
-                                    <TextField
-                                      label="EAN / GTIN"
-                                      value={v.ean ?? ""}
-                                      onChange={(val) => updateMatrixVariant(v.option_values, "ean", val)}
-                                      placeholder="EAN"
-                                      autoComplete="off"
-                                      error={String(v.ean || "").trim() === "" ? "EAN required" : undefined}
-                                    />
-                                    <TextField label={pe.inventory} type="number" min={0} value={v.inventory != null ? String(v.inventory) : "0"} onChange={(val) => updateMatrixVariant(v.option_values, "inventory", val)} placeholder="0" />
-                                  </div>
-                                </div>
-    
-                                <div className="vm-field-group vm-prices">
-                                  <div className="vm-sub-label">{pe.pricing}</div>
-                                  <div className="vm-grid-3">
-                                    {priceFields.map(({ f, centsKey, label, placeholder }) => {
-                                      const dk = mkDraftKey(f);
-                                      const isDraft = Object.prototype.hasOwnProperty.call(priceInputs, dk);
-                                      const displayVal = isDraft
-                                        ? priceInputs[dk]
-                                        : (v[centsKey] != null ? (Number(v[centsKey]) / 100).toFixed(2) : "");
-                                      return (
-                                        <TextField
-                                          key={f}
-                                          label={label}
-                                          value={displayVal}
-                                          placeholder={placeholder}
-                                          autoComplete="off"
-                                          onChange={(val) => {
-                                            const clean = sanitizePriceDraftString(val);
-                                            setPriceInputs((prev) => {
-                                              const next = { ...prev, [dk]: clean };
-                                              priceInputsRef.current = next;
-                                              return next;
-                                            });
-                                          }}
-                                          onBlur={(e) => {
-                                            const raw = sanitizePriceDraftString(e.currentTarget.value);
-                                            updateMatrixVariant(v.option_values, f, raw);
-                                            setPriceInputs((prev) => {
-                                              const next = { ...prev };
-                                              delete next[dk];
-                                              priceInputsRef.current = next;
-                                              return next;
-                                            });
-                                          }}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-    
-                                <div className="vm-field-group vm-images">
-                                  <div className="vm-sub-label">{pe.images}</div>
-                                  <div className="vm-img-strip">
-                                    {variantImgs.length === 0 && localeVariantImg && (
-                                      <div className="vm-img-item" title="Added via the full Variant Edit page — manage it there">
-                                        <img src={resolveMediaUrl(localeVariantImg)} alt="" />
-                                      </div>
-                                    )}
-                                    {variantImgs.map((imgUrl, imgIdx) => (
-                                      <div key={imgIdx} className="vm-img-item">
-                                        <img src={resolveMediaUrl(imgUrl)} alt="" />
-                                        <button
-                                          type="button"
-                                          className="vm-img-del"
-                                          onClick={() => {
-                                            const next = variantImgs.filter((_, i) => i !== imgIdx);
-                                            updateMatrixVariantMeta(v.option_values, "media", next.length ? next : null);
-                                          }}
-                                        >×</button>
-                                      </div>
-                                    ))}
-                                    {variantImgs.length < 8 && (
-                                      <button
-                                        type="button"
-                                        className="vm-img-add"
-                                        onClick={() => openVariantImgPicker(v.option_values)}
-                                      >+</button>
-                                    )}
-                                  </div>
-                                </div>
-    
-                                {!isNew && (
-                                  <div className="vm-edit-btn">
-                                    <Button
-                                      size="slim"
-                                      variant="plain"
-                                      icon={EditIcon}
-                                      accessibilityLabel="Edit variant"
-                                      onClick={() => router.push(`/products/${idOrHandle}/variants/${encodeVariantPathKey(v.option_values)}`)}
-                                    />
-                                  </div>
+                            <div key={vi} className={"vm-row" + (isSel ? " vm-row-selected" : "") + (isOff ? " vm-row-off" : "")}>
+                              <span className="vm-check">
+                                <Checkbox label="" labelHidden checked={isSel} onChange={() => toggleVariantSelected(rk)} />
+                              </span>
+                              <span className="vm-sku">
+                                <span className="vm-f">
+                                  <span>SKU</span>
+                                  <input className="vm-inp vm-inp-sku" value={v.sku ?? ""} placeholder="SKU" autoComplete="off"
+                                    onChange={(e) => updateMatrixVariant(v.option_values, "sku", e.target.value)} />
+                                </span>
+                              </span>
+                              <span className="vm-opts">
+                                {(v.option_values || []).map((val, oi) => {
+                                  const gOpt = variantGroups[oi];
+                                  const opt = (gOpt?.options || []).find(
+                                    (o) => String(o.value || "").trim().toLowerCase() === String(val || "").trim().toLowerCase()
+                                  );
+                                  const label = opt ? optionDisplayLabel(opt, locale) : val;
+                                  const swatchUrl = opt?.swatch_image;
+                                  return (
+                                    <span key={oi} className="vm-opt">
+                                      {swatchUrl && (
+                                        <span style={{ width: 11, height: 11, borderRadius: "50%", display: "inline-block", backgroundImage: "url(" + resolveMediaUrl(swatchUrl) + ")", backgroundSize: "cover", border: "1px solid var(--p-color-border)", flexShrink: 0 }} />
+                                      )}
+                                      <i>{getGroupDisplayName(oi) || gOpt?.name || ("G" + (oi + 1))}:</i>{label}
+                                    </span>
+                                  );
+                                })}
+                              </span>
+                              {!variantGpsrOk(v) && (
+                                <span className="vm-flag vm-flag-bad" title={lt(locale, "Missing GPSR fields (Manufacturer / details / responsible person)", "GPSR alanları eksik (Üretici / bilgi / sorumlu kişi)", "Champs GPSR manquants", "Faltan campos GPSR", "Campi GPSR mancanti", "GPSR-Felder fehlen (Hersteller / Info / verantwortliche Person)")}>GPSR</span>
+                              )}
+                              <span className="vm-nums">
+                                <span className="vm-f">
+                                  <span>EAN</span>
+                                  <input className={"vm-inp" + (eanErr ? " vm-err" : "")} style={{ width: 128 }} value={v.ean ?? ""} placeholder="EAN" autoComplete="off"
+                                    title={eanErr ? lt(locale, "EAN required", "EAN gerekli", "EAN requis", "EAN obligatorio", "EAN obbligatorio", "EAN erforderlich") : undefined}
+                                    onChange={(e) => updateMatrixVariant(v.option_values, "ean", e.target.value)} />
+                                </span>
+                                <span className="vm-f">
+                                  <span>{pe.inventory}</span>
+                                  <input className="vm-inp vm-inp-n" inputMode="numeric" value={v.inventory != null ? String(v.inventory) : "0"}
+                                    onChange={(e) => updateMatrixVariant(v.option_values, "inventory", e.target.value)} />
+                                </span>
+                                {priceCfg.map(({ f, centsKey, ph }) => {
+                                  const dk = rk + "_" + f;
+                                  const isDraft = Object.prototype.hasOwnProperty.call(priceInputs, dk);
+                                  const displayVal = isDraft
+                                    ? priceInputs[dk]
+                                    : (v[centsKey] != null ? (Number(v[centsKey]) / 100).toFixed(2) : "");
+                                  return (
+                                    <span className="vm-f" key={f}>
+                                      <span>{f === "price" ? pe.sellingPrice : pe.discountPrice}</span>
+                                      <input className="vm-inp vm-inp-n" value={displayVal} placeholder={ph} autoComplete="off"
+                                        onChange={(e) => {
+                                          const clean = sanitizePriceDraftString(e.target.value);
+                                          setPriceInputs((prev) => { const next = { ...prev, [dk]: clean }; priceInputsRef.current = next; return next; });
+                                        }}
+                                        onBlur={(e) => {
+                                          const raw = sanitizePriceDraftString(e.currentTarget.value);
+                                          updateMatrixVariant(v.option_values, f, raw);
+                                          setPriceInputs((prev) => { const next = { ...prev }; delete next[dk]; priceInputsRef.current = next; return next; });
+                                        }} />
+                                    </span>
+                                  );
+                                })}
+                              </span>
+                              <span className="vm-imgs">
+                                {variantImgs.length === 0 && localeVariantImg && (
+                                  <span className="vm-img" title={lt(locale, "Managed in full variant edit", "Tam varyant düzenlemede yönetilir", "Géré dans l'édition complète", "Gestionado en la edición completa", "Gestito nella modifica completa", "In der vollständigen Variantenbearbeitung verwaltet")}>
+                                    <img src={resolveMediaUrl(localeVariantImg)} alt="" />
+                                  </span>
                                 )}
-                              </div>
+                                {variantImgs.map((imgUrl, imgIdx) => (
+                                  <span key={imgIdx} className="vm-img">
+                                    <img src={resolveMediaUrl(imgUrl)} alt="" />
+                                    <button type="button" className="vm-img-x" onClick={() => {
+                                      const next = variantImgs.filter((_, i) => i !== imgIdx);
+                                      updateMatrixVariantMeta(v.option_values, "media", next.length ? next : null);
+                                    }}>×</button>
+                                  </span>
+                                ))}
+                                {variantImgs.length < 8 && (
+                                  <button type="button" className="vm-img-add" onClick={() => openVariantImgPicker(v.option_values)}>+</button>
+                                )}
+                              </span>
+                              <button type="button" className="vm-rowbtn"
+                                title={isOff
+                                  ? lt(locale, "Activate this variant", "Bu varyantı etkinleştir", "Activer cette variante", "Activar esta variante", "Attiva questa variante", "Diese Variante aktivieren")
+                                  : lt(locale, "Deactivate this variant", "Bu varyantı devre dışı bırak", "Désactiver cette variante", "Desactivar esta variante", "Disattiva questa variante", "Diese Variante deaktivieren")}
+                                onClick={() => toggleMatrixVariantDisabled(v.option_values, !isOff)}>
+                                {isOff ? "○" : "●"}
+                              </button>
+                              {!isNew && (
+                                <button type="button" className="vm-rowbtn"
+                                  title={lt(locale, "Open full variant edit", "Tam varyant düzenlemeyi aç", "Ouvrir l'édition complète", "Abrir edición completa", "Apri modifica completa", "Vollständige Variantenbearbeitung öffnen")}
+                                  onClick={() => router.push("/products/" + idOrHandle + "/variants/" + encodeVariantPathKey(v.option_values))}>✎</button>
+                              )}
+                              <button type="button" className="vm-rowbtn vm-rowbtn-danger"
+                                title={lt(locale, "Remove this variant", "Bu varyantı kaldır", "Supprimer cette variante", "Eliminar esta variante", "Rimuovi questa variante", "Diese Variante entfernen")}
+                                onClick={() => removeMatrixVariant(v.option_values)}>×</button>
                             </div>
                           );
                         })}
@@ -3668,42 +3877,42 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
             <div className="product-edit-sections">
             <BlockStack gap="300">
               <ProductSectionHeading>{pe.dimsPackaging}</ProductSectionHeading>
-              <InlineStack gap="200" wrap>
-                <Box minWidth="140px" flex="1">
+              <div className="mp-grid">
+                <div>
                   <TextField label={`${pe.width} (cm)`} type="number" value={meta.dimensions_width != null ? String(meta.dimensions_width) : ""} onChange={(v) => updateMeta("dimensions_width", v)} placeholder="0" />
-                </Box>
-                <Box minWidth="140px" flex="1">
+                </div>
+                <div>
                   <TextField label={`${pe.height} (cm)`} type="number" value={meta.dimensions_height != null ? String(meta.dimensions_height) : ""} onChange={(v) => updateMeta("dimensions_height", v)} placeholder="0" />
-                </Box>
-                <Box minWidth="140px" flex="1">
+                </div>
+                <div>
                   <TextField label={`${pe.length} (cm)`} type="number" value={meta.dimensions_length != null ? String(meta.dimensions_length) : ""} onChange={(v) => updateMeta("dimensions_length", v)} placeholder="0" />
-                </Box>
-                <Box minWidth="140px" flex="1">
+                </div>
+                <div>
                   <TextField label={`${pe.weight} (g)`} type="number" value={meta.weight_grams != null ? String(meta.weight_grams) : ""} onChange={(v) => updateMeta("weight_grams", v === "" ? "" : parseInt(v, 10))} placeholder="0" />
-                </Box>
-              </InlineStack>
-              <InlineStack gap="200" wrap>
-                <Box minWidth="180px" flex="1">
+                </div>
+              </div>
+              <div className="mp-grid">
+                <div>
                   <TextField label={pe.salesUnit} value={meta.sales_unit ?? ""} onChange={(v) => updateMeta("sales_unit", v)} placeholder={lt(locale, "e.g. piece", "örn. adet", "ex. pièce", "ej. unidad", "es. pezzo", "z. B. Stück")} autoComplete="off" />
-                </Box>
-                <Box minWidth="180px" flex="1">
+                </div>
+                <div>
                   <Select label={pe.unitOfMeasure} options={UNIT_TYPE_OPTIONS} value={meta.unit_type ?? ""} onChange={(v) => updateMeta("unit_type", v)} />
-                </Box>
-                <Box minWidth="180px" flex="1">
+                </div>
+                <div>
                   <TextField label={pe.packagingUnit} value={meta.packaging_unit ?? ""} onChange={(v) => updateMeta("packaging_unit", v)} placeholder={lt(locale, "e.g. carton", "örn. koli", "ex. carton", "ej. cartón", "es. cartone", "z. B. Karton")} autoComplete="off" />
-                </Box>
-              </InlineStack>
-              <InlineStack gap="200" wrap>
-                <Box minWidth="180px" flex="1">
+                </div>
+              </div>
+              <div className="mp-grid">
+                <div>
                   <TextField label={pe.packagingUnitPlural} value={meta.packaging_unit_plural ?? ""} onChange={(v) => updateMeta("packaging_unit_plural", v)} placeholder={lt(locale, "e.g. cartons", "örn. koliler", "ex. cartons", "ej. cartones", "es. cartoni", "z. B. Kartons")} autoComplete="off" />
-                </Box>
-                <Box minWidth="180px" flex="1">
+                </div>
+                <div>
                   <TextField label={pe.baseUnit} type="number" value={meta.unit_reference != null ? String(meta.unit_reference) : "1"} onChange={(v) => updateMeta("unit_reference", v)} placeholder="1" />
-                </Box>
-                <Box minWidth="180px" flex="1">
+                </div>
+                <div>
                   <TextField label={lt(locale, "Amount", "Miktar", "Quantité", "Cantidad", "Quantità", "Menge")} type="number" value={meta.unit_value != null ? String(meta.unit_value) : ""} onChange={(v) => updateMeta("unit_value", v)} placeholder="e.g. 200" />
-                </Box>
-              </InlineStack>
+                </div>
+              </div>
               <Text as="p" variant="bodySm" tone="subdued">{lt(locale, "Shown on the product, e.g. \"Content: 200 g (€5.00* / 1 kg)\".", "Ürün sayfasında gösterilir, örn. \"İçerik: 200 g (€5,00* / 1 kg)\".", "Affiché sur le produit, ex. « Contenu : 200 g (5,00 €* / 1 kg) ».", "Se muestra en el producto, ej. « Contenido: 200 g (5,00 €* / 1 kg) ».", "Mostrato sul prodotto, es. « Contenuto: 200 g (5,00 €* / 1 kg) ».", "Wird auf dem Produkt angezeigt, z. B. „Inhalt: 200 g (5,00 €* / 1 kg)“.")}</Text>
             </BlockStack>
             </div>
@@ -3765,6 +3974,16 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                                     }
                                   />
                                   <ChangeRequestFieldBadge requests={pendingChangeRequests} fieldName={`metadata.${defKey}`} />
+                                  <span style={{ flex: 1 }} />
+                                  <button
+                                    type="button"
+                                    title={lt(locale, "Remove this property", "Bu özelliği kaldır", "Supprimer cette propriété", "Eliminar esta propiedad", "Rimuovi questa proprietà", "Diese Eigenschaft entfernen")}
+                                    onClick={() => {
+                                      updateMeta("metafields", metafieldsList.filter((m) => m.key !== defKey));
+                                      setExtraVisibleMetaDefKeys((p) => { const n = { ...p }; delete n[defKey]; return n; });
+                                    }}
+                                    style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--p-color-text-subdued)", fontSize: 16, lineHeight: 1, padding: "2px 6px", borderRadius: 6 }}
+                                  >×</button>
                                 </InlineStack>
                               </BlockStack>
                               {selected.length > 0 && (
@@ -4092,6 +4311,12 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                           ? "Richiesto dal regolamento UE sulla sicurezza generale dei prodotti. Inserisci il fabbricante e una persona responsabile nell'UE per mostrare i contatti di sicurezza. Tocca « i » per i dettagli."
                           : "Erforderlich nach der EU-Produktsicherheitsverordnung (GPSR). Tragen Sie Hersteller und eine in der EU ansässige verantwortliche Person ein, damit der Shop die gesetzlich vorgeschriebenen Sicherheitskontakte anzeigen kann. Tippen Sie auf „i“ für Details."}
               </Text>
+              <div
+                id="gpsr-fields"
+                className={saveErrorFields.some((e) => e.tab === 3) ? "vm-field-err" : undefined}
+                style={saveErrorFields.some((e) => e.tab === 3) ? { padding: 10 } : undefined}
+              >
+              <BlockStack gap="400">
               <TextField
                 label={
                   <InlineStack gap="200" blockAlign="center" wrap={false}>
@@ -4161,6 +4386,8 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
                 placeholder={locale === "en" ? "Name, EU address, email/phone" : locale === "tr" ? "Ad, AB adresi, e-posta/telefon" : "Name, EU-Adresse, E-Mail/Telefon"}
                 multiline={2}
               />
+              </BlockStack>
+              </div>
 
               <ComplianceFieldsSection
                 client={client}
@@ -4316,6 +4543,147 @@ export default function ProductEditPage({ product: initialProduct, idOrHandle, i
           </div>
         </div>
       )}
+
+      {/* Variant image + swatch pickers — top-level so they open from any tab (Variants/Specs) */}
+      {/* ── Variant image picker (multiple) ── */}
+      <MediaPickerModal
+        open={variantImgPickerTarget !== null}
+        onClose={() => setVariantImgPickerTarget(null)}
+        title={
+          variantImgPickerTarget
+            ? `${locale === "en" ? "Images" : locale === "tr" ? "Görseller" : locale === "fr" ? "Images" : locale === "es" ? "Imágenes" : locale === "it" ? "Immagini" : "Bilder"} — ${variantImgPickerTarget.join(" / ")}`
+            : (locale === "en" ? "Variant images" : locale === "tr" ? "Varyant görselleri" : locale === "fr" ? "Images variante" : locale === "es" ? "Imágenes de variante" : locale === "it" ? "Immagini variante" : "Variantenbilder")
+        }
+        multiple={true}
+        uploadPurpose="product"
+        onSelect={(urls) => {
+          if (!variantImgPickerTarget || !urls.length) {
+            setVariantImgPickerTarget(null);
+            return;
+          }
+          const row = (product?.variants || []).find(
+            (v) =>
+              Array.isArray(v.option_values) &&
+              v.option_values.join("\u0000") === variantImgPickerTarget.join("\u0000")
+          );
+          const existing = Array.isArray(row?.metadata?.media) ? row.metadata.media : [];
+          const merged = [...existing, ...urls].slice(0, 8);
+          updateMatrixVariantMeta(variantImgPickerTarget, "media", merged);
+          setVariantImgPickerTarget(null);
+        }}
+      />
+
+      {/* ── Swatch image picker ── */}
+      <MediaPickerModal
+        open={swatchPickerTarget !== null}
+        onClose={() => setSwatchPickerTarget(null)}
+        title={swatchPickerTarget
+          ? `Swatch — "${variantGroups[swatchPickerTarget.gi]?.options?.[swatchPickerTarget.oi]?.value || "option"}"`
+          : (locale === "en" ? "Swatch image" : locale === "tr" ? "Swatch görseli" : locale === "fr" ? "Image swatch" : locale === "es" ? "Imagen swatch" : locale === "it" ? "Immagine swatch" : "Swatch-Bild")}
+        multiple={false}
+        onSelect={(urls) => {
+          if (swatchPickerTarget && urls[0]) {
+            vg_setOption(swatchPickerTarget.gi, swatchPickerTarget.oi, "swatch_image", urls[0]);
+          }
+          setSwatchPickerTarget(null);
+        }}
+      />
+
+      {/* Bulk variant edit — copy from / lock to the main article for every selected matrix row */}
+      <Modal
+        open={bulkVariantOpen}
+        onClose={() => setBulkVariantOpen(false)}
+        title={lt(
+          locale,
+          selectedVariantKeys.size + " variants — bulk edit",
+          selectedVariantKeys.size + " varyant — toplu düzenle",
+          selectedVariantKeys.size + " variantes — édition groupée",
+          selectedVariantKeys.size + " variantes — edición masiva",
+          selectedVariantKeys.size + " varianti — modifica in blocco",
+          selectedVariantKeys.size + " Varianten — Sammelbearbeitung",
+        )}
+        primaryAction={{
+          content: lt(locale, "Apply to selected", "Seçilenlere uygula", "Appliquer", "Aplicar", "Applica", "Auf Auswahl anwenden"),
+          onAction: applyBulkVariantEdit,
+          disabled: !bulkVariantHasChanges,
+        }}
+        secondaryActions={[{ content: ui.cancel, onAction: () => setBulkVariantOpen(false) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p" variant="bodySm" tone="subdued">
+              {lt(
+                locale,
+                "Turn on the hook to copy the main article's value into every selected variant and keep it linked. Or type a value to set it on all selected variants.",
+                "Ana ürünün değerini seçili tüm varyantlara kopyalamak ve bağlı tutmak için kancayı açın. Ya da tüm seçili varyantlara yazmak için bir değer girin.",
+                "Activez le crochet pour copier la valeur de l'article principal dans toutes les variantes sélectionnées et la garder liée. Ou saisissez une valeur.",
+                "Activa el gancho para copiar el valor del artículo principal en todas las variantes seleccionadas y mantenerlo vinculado. O escribe un valor.",
+                "Attiva il gancio per copiare il valore dell'articolo principale in tutte le varianti selezionate e mantenerlo collegato. Oppure inserisci un valore.",
+                "Haken aktivieren, um den Wert des Hauptartikels in alle ausgewählten Varianten zu übernehmen und verknüpft zu halten. Oder einen Wert eingeben.",
+              )}
+            </Text>
+            <Button
+              size="slim"
+              onClick={() => setBulkVariantCfg((prev) => {
+                const n = { ...prev };
+                ["hersteller", "hersteller_information", "verantwortliche_person_information"].forEach((k) => { n[k] = { lock: true, value: "" }; });
+                return n;
+              })}
+            >
+              {lt(locale, "Link all GPSR fields to main article", "Tüm GPSR alanlarını ana ürüne bağla", "Lier tous les champs GPSR à l'article principal", "Vincular todos los campos GPSR al artículo principal", "Collega tutti i campi GPSR all'articolo principale", "Alle GPSR-Felder mit Hauptartikel verknüpfen")}
+            </Button>
+            {BULK_PARENT_FIELDS.map((f) => {
+              const cfg = bulkVariantCfg[f.key] || { lock: false, value: "" };
+              const parentVal = String((product?.metadata || {})[f.key] ?? "");
+              return (
+                <div key={f.key} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <button
+                    type="button"
+                    title={lt(locale, "Use main article value", "Ana ürün değerini kullan", "Utiliser la valeur de l'article principal", "Usar el valor del artículo principal", "Usa il valore dell'articolo principale", "Wert vom Hauptartikel übernehmen")}
+                    onClick={() => setBulkVariantCfg((prev) => ({ ...prev, [f.key]: { lock: !cfg.lock, value: cfg.value || "" } }))}
+                    style={{
+                      marginTop: f.kind === "text" ? 24 : 2, width: 34, height: 30, flexShrink: 0, borderRadius: 8,
+                      border: "1px solid var(--p-color-border)", cursor: "pointer",
+                      background: cfg.lock ? "var(--p-color-bg-fill-brand, #303030)" : "transparent",
+                      color: cfg.lock ? "#fff" : "var(--p-color-text-subdued)",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+                    }}
+                  >
+                    {cfg.lock ? "🔗" : "○"}
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    {f.kind === "text" ? (
+                      <TextField
+                        label={bulkFieldLabel(f.key)}
+                        value={cfg.lock ? parentVal : (cfg.value || "")}
+                        disabled={cfg.lock}
+                        multiline={f.multiline ? 2 : undefined}
+                        autoComplete="off"
+                        placeholder={parentVal || undefined}
+                        helpText={cfg.lock
+                          ? lt(locale, "Linked to main article — copied into each variant on save", "Ana ürüne bağlı — kaydetmede her varyanta kopyalanır", "Lié à l'article principal — copié à l'enregistrement", "Vinculado al artículo principal — se copia al guardar", "Collegato all'articolo principale — copiato al salvataggio", "Mit Hauptartikel verknüpft — beim Speichern in jede Variante übernommen")
+                          : undefined}
+                        onChange={(val) => setBulkVariantCfg((prev) => ({ ...prev, [f.key]: { lock: false, value: val } }))}
+                      />
+                    ) : (
+                      <div style={{ paddingTop: 4 }}>
+                        <Text as="span" variant="bodyMd" fontWeight="medium">{bulkFieldLabel(f.key)}</Text>
+                        <div>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {cfg.lock
+                              ? lt(locale, "Will be copied from the main article and kept linked.", "Ana üründen kopyalanacak ve bağlı kalacak.", "Sera copié depuis l'article principal et gardé lié.", "Se copiará del artículo principal y se mantendrá vinculado.", "Verrà copiato dall'articolo principale e mantenuto collegato.", "Wird vom Hauptartikel übernommen und verknüpft gehalten.")
+                              : lt(locale, "Hook off — variants keep their own value.", "Kanca kapalı — varyantlar kendi değerini korur.", "Crochet désactivé — les variantes gardent leur valeur.", "Gancho desactivado — las variantes conservan su valor.", "Gancio disattivato — le varianti mantengono il proprio valore.", "Haken aus — Varianten behalten ihren eigenen Wert.")}
+                          </Text>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
 
       <Modal
         open={duplicateModalOpen}

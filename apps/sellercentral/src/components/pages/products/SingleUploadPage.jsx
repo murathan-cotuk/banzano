@@ -102,7 +102,7 @@ export default function SingleUploadPage() {
   }, []);
 
   useEffect(() => {
-    // Guard against the literal string "null"/"undefined" — localStorage.setItem() stringifies
+    // Guard against the literal string "null"/"undefined" â€” localStorage.setItem() stringifies
     // whatever it's given, so a login response with seller_id: null silently becomes the 4-char
     // string "null" here, which is truthy and used to look valid while actually breaking every
     // downstream check that only tests `!!sellerId` (e.g. the create-product button below).
